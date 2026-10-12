@@ -36,3 +36,9 @@ This document records the confirmed architectural decisions for Project Vingilot
 - **Status:** Accepted
 - **Context:** Integrating AI capabilities without compromising user control and safety.
 - **Decision:** Implement Model Context Protocol (MCP) compatible tools where read-only actions execute directly and mutating actions require user confirmation.
+
+## ADR-008: Local Encrypted Password Manager "Círdan"
+- **Status:** Accepted
+- **Context:** Secure local credential management without cloud exposure.
+- **Decision:** Introduce a local-only password manager named "Círdan". Passwords are stored encrypted locally in SQLite, never synced online, and can only be exported/imported via user-initiated encrypted bundles protected by a master passphrase.
+
