@@ -9,7 +9,7 @@
 ## Phase 1 — Core Data Models
 
 - [x] TASK-010: Core Error and Result Types
-- [ ] TASK-011: Portable Data Models
+- [x] TASK-011: Portable Data Models
 - [ ] TASK-012: SQLite Persistence Layer
 
 ## Phase 2 — Browser Engine Layer
