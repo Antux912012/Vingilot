@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "crates/vingilot-core",
+    "crates/vingilot-engine",
+    "crates/vingilot-ui",
+    "crates/vingilot-ai",
+    "crates/vingilot-cli",
+]
+resolver = "2"

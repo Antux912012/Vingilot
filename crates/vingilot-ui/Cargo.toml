@@ -1,0 +1,13 @@
+[package]
+name = "vingilot-ui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+vingilot-core = { path = "../vingilot-core" }
+vingilot-engine = { path = "../vingilot-engine" }
+vingilot-ai = { path = "../vingilot-ai" }
+
+[[bin]]
+name = "vingilot-ui"
+path = "src/main.rs"
