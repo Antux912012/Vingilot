@@ -1,17 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Background Squircle -->
-  <!-- Solid flat dark blue, characteristic of Papirus dark/night themes -->
-  <rect x="8" y="8" width="112" height="112" rx="24" fill="#1c3d5a"/>
-  
+  <defs>
+    <!-- Adaptive CSS variables fallback to #062640 / palette colors -->
+    <style>
+      .squircle-bg {
+        fill: var(--gnome-palette-blue-5, #062640);
+      }
+      .star-facet-tl {
+        fill: #e9c96d;
+      }
+      .star-facet-bl {
+        fill: #efd980;
+      }
+      .star-facet-tr {
+        fill: #c99b3d;
+      }
+      .star-facet-br {
+        fill: #c5993c;
+      }
+      .hull-line {
+        stroke: #ffffff;
+        stroke-width: 4;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        fill: none;
+      }
+    </style>
+  </defs>
+
+  <!-- Background Squircle: GNOME / Papirus standard style -->
+  <rect class="squircle-bg" x="8" y="8" width="112" height="112" rx="28" ry="28"/>
+
+  <!-- The Silmaril (Four-pointed 3D Star) -->
+  <!-- Center: (64, 46.5) | Top: (64, 26) | Bottom: (64, 67) | Left: (44, 46.5) | Right: (84, 46.5) | Inner diagonal radius: 3.2 -->
+  <g id="silmaril-star">
+    <!-- Top-Left Facet -->
+    <polygon class="star-facet-tl" points="64,26 64,46.5 61.7,44.2"/>
+    <polygon class="star-facet-tl" points="44,46.5 64,46.5 61.7,44.2"/>
+    <!-- Bottom-Left Facet -->
+    <polygon class="star-facet-bl" points="44,46.5 64,46.5 61.7,48.8"/>
+    <polygon class="star-facet-bl" points="64,67 64,46.5 61.7,48.8"/>
+    <!-- Top-Right Facet -->
+    <polygon class="star-facet-tr" points="64,26 64,46.5 66.3,44.2"/>
+    <polygon class="star-facet-tr" points="84,46.5 64,46.5 66.3,44.2"/>
+    <!-- Bottom-Right Facet -->
+    <polygon class="star-facet-br" points="84,46.5 64,46.5 66.3,48.8"/>
+    <polygon class="star-facet-br" points="64,67 64,46.5 66.3,48.8"/>
+  </g>
+
   <!-- Boat Hull (Vingilot) -->
-  <!-- Clean, flat white shape without shading -->
-  <path d="M 35 85 Q 64 100 93 85 L 80 75 L 48 75 Z" fill="#ffffff"/>
-  
-  <!-- Mast -->
-  <!-- Simple vertical element, flat light grey -->
-  <rect x="62" y="40" width="4" height="40" fill="#e0e0e0"/>
-  
-  <!-- The Silmaril (Star) -->
-  <!-- Flat gold color, no glow, simplified 5-point star for minimalism -->
-  <path d="M 64 22 L 67 31 L 77 31 L 69 37 L 72 46 L 64 40 L 56 46 L 59 37 L 51 31 L 61 31 Z" fill="#FFD700"/>
+  <!-- Outer Pentagon Hull with Center Vertical Keel/Mast -->
+  <g id="boat-hull">
+    <polygon class="hull-line" points="64,76 100,89 93,109 35,109 28,89"/>
+    <line class="hull-line" x1="64" y1="76" x2="64" y2="109"/>
+  </g>
 </svg>
