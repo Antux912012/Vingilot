@@ -7,6 +7,7 @@ pub mod error;
 pub mod models;
 pub mod profile_manager;
 pub mod repositories;
+pub mod search_engine_manager;
 
 pub use bookmark_manager::BookmarkManager;
 pub use cirdan::*;
@@ -15,6 +16,7 @@ pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use profile_manager::ProfileManager;
 pub use repositories::*;
+pub use search_engine_manager::SearchEngineManager;
 
 #[cfg(test)]
 mod tests {

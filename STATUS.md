@@ -40,8 +40,8 @@
 
 ## Phase 6 — Search Engines and Settings
 
-- [ ] TASK-060: Search Engine Manager
-- [ ] TASK-061: Settings Panel
+- [x] TASK-060: Search Engine Manager
+- [x] TASK-061: Settings Panel
 
 ## Phase 7 — Reading Mode and Themes
 
