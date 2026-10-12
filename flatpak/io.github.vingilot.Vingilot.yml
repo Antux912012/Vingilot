@@ -35,8 +35,13 @@ modules:
       - install -Dm755 target/release/vingilot-cli /app/bin/vingilot-cli
       - install -Dm644 data/io.github.vingilot.Vingilot.desktop /app/share/applications/io.github.vingilot.Vingilot.desktop
       - install -Dm644 data/io.github.vingilot.Vingilot.metainfo.xml /app/share/metainfo/io.github.vingilot.Vingilot.metainfo.xml
-      - install -Dm644 data/io.github.vingilot.Vingilot.svg /app/share/icons/hicolor/scalable/apps/io.github.vingilot.Vingilot.svg
-      - install -Dm644 data/io.github.vingilot.Vingilot.svg /app/share/icons/hicolor/128x128/apps/io.github.vingilot.Vingilot.svg
+      - install -Dm644 data/icons/hicolor/16x16/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/16x16/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/32x32/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/32x32/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/48x48/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/48x48/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/64x64/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/64x64/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/128x128/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/128x128/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/256x256/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/256x256/apps/io.github.vingilot.Vingilot.png
+      - install -Dm644 data/icons/hicolor/512x512/apps/io.github.vingilot.Vingilot.png /app/share/icons/hicolor/512x512/apps/io.github.vingilot.Vingilot.png
     sources:
       - type: dir
         path: ..
