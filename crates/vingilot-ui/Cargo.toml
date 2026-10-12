@@ -8,6 +8,7 @@ vingilot-core = { path = "../vingilot-core" }
 vingilot-engine = { path = "../vingilot-engine" }
 vingilot-ai = { path = "../vingilot-ai" }
 uuid = { version = "1.10", features = ["v4"] }
+chrono = "0.4"
 
 [[bin]]
 name = "vingilot-ui"

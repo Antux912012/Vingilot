@@ -1,9 +1,15 @@
+pub mod bookmark_panel;
+pub mod history_panel;
 pub mod layout;
+pub mod profile_switcher;
 pub mod sidebar;
 pub mod tabs;
 pub mod window;
 
+pub use bookmark_panel::BookmarkPanel;
+pub use history_panel::HistoryPanel;
 pub use layout::{AdaptiveLayoutManager, LayoutMode};
+pub use profile_switcher::ProfileSwitcher;
 pub use sidebar::{SideTabSidebar, SidebarTabItem};
 pub use tabs::{Tab, TabManager};
 pub use window::VingilotWindow;

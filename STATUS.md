@@ -32,11 +32,11 @@
 
 ## Phase 5 — Profiles, Bookmarks, History
 
-- [ ] TASK-050: Profile Backend
-- [ ] TASK-051: Profile Switcher UI
-- [ ] TASK-052: Bookmark Backend
-- [ ] TASK-053: Bookmark Panel UI
-- [ ] TASK-054: History Backend and Panel
+- [x] TASK-050: Profile Backend
+- [x] TASK-051: Profile Switcher UI
+- [x] TASK-052: Bookmark Backend
+- [x] TASK-053: Bookmark Panel UI
+- [x] TASK-054: History Backend and Panel
 
 ## Phase 6 — Search Engines and Settings
 
