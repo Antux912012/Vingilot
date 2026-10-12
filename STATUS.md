@@ -74,12 +74,12 @@
 
 ## Phase 11 — Browser Import
 
-- [ ] TASK-110: Firefox Bookmark Import
-- [ ] TASK-111: Firefox History Import
-- [ ] TASK-112: Chrome/Chromium Bookmark Import
-- [ ] TASK-113: Chrome/Chromium History Import
-- [ ] TASK-114: Generic Bookmark Import
-- [ ] TASK-115: Import Source Selection UI
+- [x] TASK-110: Firefox Bookmark Import
+- [x] TASK-111: Firefox History Import
+- [x] TASK-112: Chrome/Chromium Bookmark Import
+- [x] TASK-113: Chrome/Chromium History Import
+- [x] TASK-114: Generic Bookmark Import
+- [x] TASK-115: Import Source Selection UI
 
 ## Phase 12 — CLI
 
