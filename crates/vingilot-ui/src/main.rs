@@ -1,3 +1,4 @@
+pub mod ai_panel;
 pub mod bookmark_panel;
 pub mod history_panel;
 pub mod layout;
@@ -9,6 +10,7 @@ pub mod tabs;
 pub mod theme;
 pub mod window;
 
+pub use ai_panel::{AiAssistantPanel, AiChatEntry};
 pub use bookmark_panel::BookmarkPanel;
 pub use history_panel::HistoryPanel;
 pub use layout::{AdaptiveLayoutManager, LayoutMode};

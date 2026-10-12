@@ -56,10 +56,10 @@
 
 ## Phase 9 — AI and MCP
 
-- [ ] TASK-090: AI Provider Abstraction
-- [ ] TASK-091: Browser Tool Dispatcher
-- [ ] TASK-092: MCP Server
-- [ ] TASK-093: AI Assistant Panel
+- [x] TASK-090: AI Provider Abstraction
+- [x] TASK-091: Browser Tool Dispatcher
+- [x] TASK-092: MCP Server
+- [x] TASK-093: AI Assistant Panel
 
 ## Phase 10 — Local Sync Bundles
 
