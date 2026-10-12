@@ -71,6 +71,9 @@ impl Database {
                 visit_count INTEGER NOT NULL DEFAULT 1,
                 last_visited_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                preview_path TEXT,
+                preview_updated INTEGER,
+                hidden INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
             );
 
@@ -132,6 +135,12 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_cirdan_profile_domain ON cirdan_credentials(profile_id, url_or_domain);
             "#,
         )?;
+
+        // Run migrations for existing databases
+        let _ = self.conn.execute("ALTER TABLE history ADD COLUMN preview_path TEXT;", []);
+        let _ = self.conn.execute("ALTER TABLE history ADD COLUMN preview_updated INTEGER;", []);
+        let _ = self.conn.execute("ALTER TABLE history ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;", []);
+
         Ok(())
     }
 }

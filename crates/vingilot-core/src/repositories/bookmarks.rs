@@ -113,11 +113,11 @@ impl<'a> BookmarkRepository<'a> {
     pub fn list_by_parent(&self, parent_id: Option<Uuid>) -> CoreResult<Vec<BookmarkNode>> {
         let (sql, param_val) = match parent_id {
             Some(pid) => (
-                "SELECT id, parent_id, title, url, is_folder, position, created_at, updated_at FROM bookmarks WHERE parent_id = ?1 ORDER BY position ASC, created_at ASC",
+                "SELECT id, parent_id, title, url, is_folder, position, created_at, updated_at FROM bookmarks WHERE parent_id = ?1 ORDER BY CASE WHEN is_folder != 0 THEN 0 ELSE 1 END, position ASC, title ASC, created_at ASC",
                 Some(pid.to_string()),
             ),
             None => (
-                "SELECT id, parent_id, title, url, is_folder, position, created_at, updated_at FROM bookmarks WHERE parent_id IS NULL ORDER BY position ASC, created_at ASC",
+                "SELECT id, parent_id, title, url, is_folder, position, created_at, updated_at FROM bookmarks WHERE parent_id IS NULL ORDER BY CASE WHEN is_folder != 0 THEN 0 ELSE 1 END, position ASC, title ASC, created_at ASC",
                 None,
             ),
         };
@@ -133,6 +133,61 @@ impl<'a> BookmarkRepository<'a> {
             nodes.push(item?);
         }
         Ok(nodes)
+    }
+
+    pub fn count_children(&self, parent_id: Option<Uuid>) -> CoreResult<usize> {
+        let (sql, param_val) = match parent_id {
+            Some(pid) => (
+                "SELECT COUNT(*) FROM bookmarks WHERE parent_id = ?1",
+                Some(pid.to_string()),
+            ),
+            None => (
+                "SELECT COUNT(*) FROM bookmarks WHERE parent_id IS NULL",
+                None,
+            ),
+        };
+
+        let count: i64 = match param_val {
+            Some(pid_str) => self
+                .db
+                .conn()
+                .query_row(sql, params![pid_str], |row| row.get(0))?,
+            None => self.db.conn().query_row(sql, [], |row| row.get(0))?,
+        };
+
+        Ok(count as usize)
+    }
+
+    pub fn rename(&self, id: Uuid, new_title: &str) -> CoreResult<bool> {
+        let now = Utc::now();
+        let count = self.db.conn().execute(
+            "UPDATE bookmarks SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_title, now.to_rfc3339(), id.to_string()],
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn move_node(&self, id: Uuid, new_parent_id: Option<Uuid>, position: i32) -> CoreResult<bool> {
+        let now = Utc::now();
+        let count = self.db.conn().execute(
+            "UPDATE bookmarks SET parent_id = ?1, position = ?2, updated_at = ?3 WHERE id = ?4",
+            params![
+                new_parent_id.map(|u| u.to_string()),
+                position,
+                now.to_rfc3339(),
+                id.to_string()
+            ],
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn update_position(&self, id: Uuid, position: i32) -> CoreResult<bool> {
+        let now = Utc::now();
+        let count = self.db.conn().execute(
+            "UPDATE bookmarks SET position = ?1, updated_at = ?2 WHERE id = ?3",
+            params![position, now.to_rfc3339(), id.to_string()],
+        )?;
+        Ok(count > 0)
     }
 
     fn map_row(row: &rusqlite::Row) -> rusqlite::Result<BookmarkNode> {

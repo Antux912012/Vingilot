@@ -50,6 +50,19 @@ pub struct HistoryEntry {
     pub visit_count: i64,
     pub last_visited_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    #[serde(default)]
+    pub preview_path: Option<String>,
+    #[serde(default)]
+    pub preview_updated: Option<i64>,
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+/// Breadcrumb item representing a folder level in the bookmark tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BookmarkBreadcrumb {
+    pub id: Option<Uuid>,
+    pub title: String,
 }
 
 /// Search engine definition with shortcut support.

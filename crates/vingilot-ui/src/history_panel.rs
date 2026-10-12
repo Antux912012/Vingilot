@@ -72,6 +72,9 @@ mod tests {
             visit_count: 5,
             last_visited_at: now,
             created_at: now,
+            preview_path: None,
+            preview_updated: None,
+            hidden: false,
         };
         let e2 = HistoryEntry {
             id: Uuid::new_v4(),
@@ -81,6 +84,9 @@ mod tests {
             visit_count: 2,
             last_visited_at: now,
             created_at: now,
+            preview_path: None,
+            preview_updated: None,
+            hidden: false,
         };
 
         let mut panel = HistoryPanel::new();

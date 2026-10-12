@@ -185,6 +185,9 @@ impl FirefoxImporter {
                 visit_count,
                 last_visited_at,
                 created_at: last_visited_at,
+                preview_path: None,
+                preview_updated: None,
+                hidden: false,
             })
         })?;
 
@@ -307,6 +310,9 @@ impl ChromiumImporter {
                 visit_count,
                 last_visited_at,
                 created_at: last_visited_at,
+                preview_path: None,
+                preview_updated: None,
+                hidden: false,
             })
         })?;
 

@@ -16,11 +16,22 @@
   <url type="homepage">https://github.com/Antux912012/Vingilot</url>
   <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
   <releases>
+    <release version="0.1.2-b" date="2026-10-12">
+      <description>
+        <p>
+          Beta release featuring native Libadwaita Start Page with dynamic search bar,
+          customizable GNOME accent palette, recent cards with page previews, Opera-style
+          drag-and-drop bookmark management, resizable settings pane, address bar bookmarking star,
+          and distraction-free reading mode.
+        </p>
+      </description>
+    </release>
     <release version="0.1.1a" date="2026-10-12">
       <description>
         <p>
-          Alpha release featuring collapsible vertical tab sidebar with favicon-only mode,
-          horizontal separator for pinned tabs, mouse drag reordering, and unified Libadwaita chrome styling.
+          Alpha release featuring native Libadwaita Start Page with dynamic search bar,
+          recently viewed cards with page previews, Opera-style drag-and-drop bookmark management,
+          collapsible vertical tab sidebar, and unified chrome styling.
         </p>
       </description>
     </release>

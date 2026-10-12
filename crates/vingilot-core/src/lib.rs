@@ -9,12 +9,13 @@ pub mod db;
 pub mod error;
 pub mod merge;
 pub mod models;
+pub mod previews;
 pub mod profile_manager;
 pub mod reader;
 pub mod repositories;
 pub mod search_engine_manager;
 
-pub use bookmark_manager::BookmarkManager;
+pub use bookmark_manager::{BookmarkManager, BookmarkStore};
 pub use browser_import::{
     BrowserDetector, BrowserType, ChromiumImporter, DetectedBrowserProfile, FirefoxImporter,
     GenericBookmarkImporter,
@@ -26,6 +27,7 @@ pub use db::Database;
 pub use error::{CoreError, CoreResult};
 pub use merge::{ImportMode, MergeManager};
 pub use models::*;
+pub use previews::*;
 pub use profile_manager::ProfileManager;
 pub use reader::{ExtractedArticle, ReaderExtractor};
 pub use repositories::*;

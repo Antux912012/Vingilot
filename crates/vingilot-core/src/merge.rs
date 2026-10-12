@@ -154,6 +154,9 @@ mod tests {
             visit_count: 1,
             last_visited_at: Utc::now(),
             created_at: Utc::now(),
+            preview_path: None,
+            preview_updated: None,
+            hidden: false,
         });
 
         merger

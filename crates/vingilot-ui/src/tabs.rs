@@ -11,6 +11,7 @@ pub struct Tab {
     pub is_incognito: bool, // "Navigating Shadowy Seas"
     pub is_pinned: bool,
     pub favicon_ptr: usize,
+    pub is_start_page: bool,
 }
 
 impl Tab {
@@ -26,7 +27,7 @@ impl Tab {
         let title = if is_incognito {
             "Navigating Shadowy Seas".to_string()
         } else {
-            "New Tab".to_string()
+            "Start Page".to_string()
         };
 
         Self {
@@ -37,12 +38,25 @@ impl Tab {
             is_incognito,
             is_pinned: false,
             favicon_ptr: 0,
+            is_start_page: !is_incognito,
         }
     }
 
     /// Navigates the tab to a URL.
     pub fn navigate(&mut self, url: &str) -> Result<(), String> {
-        self.engine.load_url(url).map_err(|e| e.to_string())?;
+        let trimmed = url.trim();
+        if trimmed == "about:blank" || trimmed == "browser://start" || trimmed.is_empty() {
+            self.is_start_page = true;
+            self.url = trimmed.to_string();
+            self.title = if self.is_incognito {
+                "Navigating Shadowy Seas".to_string()
+            } else {
+                "Start Page".to_string()
+            };
+            return Ok(());
+        }
+        self.is_start_page = false;
+        self.engine.load_url(trimmed).map_err(|e| e.to_string())?;
         self.sync();
         Ok(())
     }
