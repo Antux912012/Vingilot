@@ -1402,7 +1402,7 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
             .unwrap()
             .as_ptr(),
     );
-    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.0").unwrap().as_ptr());
+    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.1a").unwrap().as_ptr());
     (b.adw_about_dialog_set_developer_name)(
         dialog,
         CString::new("Antonio & The Vingilot Project Team")
@@ -1415,13 +1415,13 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
     );
     (b.adw_about_dialog_set_website)(
         dialog,
-        CString::new("https://github.com/vingilot/Vingilot")
+        CString::new("https://github.com/Antux912012/Vingilot")
             .unwrap()
             .as_ptr(),
     );
     (b.adw_about_dialog_set_issue_url)(
         dialog,
-        CString::new("https://github.com/vingilot/Vingilot/issues")
+        CString::new("https://github.com/Antux912012/Vingilot/issues")
             .unwrap()
             .as_ptr(),
     );

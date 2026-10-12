@@ -139,7 +139,7 @@ pub fn handle_cli(cli: Cli) -> Result<(), String> {
             let manifest = SyncManifest {
                 schema_version: 1,
                 application: "Vingilot CLI".to_string(),
-                app_version: "0.1.0".to_string(),
+                app_version: "0.1.1a".to_string(),
                 created_at: chrono::Utc::now(),
                 device: DeviceIdentity {
                     device_id: uuid::Uuid::new_v4(),

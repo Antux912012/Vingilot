@@ -13,7 +13,18 @@
     </p>
   </description>
   <launchable type="desktop-id">io.github.vingilot.Vingilot.desktop</launchable>
-  <url type="homepage">https://github.com/vingilot/vingilot</url>
+  <url type="homepage">https://github.com/Antux912012/Vingilot</url>
+  <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
+  <releases>
+    <release version="0.1.1a" date="2026-10-12">
+      <description>
+        <p>
+          Alpha release featuring collapsible vertical tab sidebar with favicon-only mode,
+          horizontal separator for pinned tabs, mouse drag reordering, and unified Libadwaita chrome styling.
+        </p>
+      </description>
+    </release>
+  </releases>
   <provides>
     <binary>vingilot-ui</binary>
     <binary>vingilot-cli</binary>
