@@ -51,8 +51,8 @@
 
 ## Phase 8 — Downloads and Permissions
 
-- [ ] TASK-080: Basic Download Manager
-- [ ] TASK-081: Permission Prompts
+- [x] TASK-080: Basic Download Manager
+- [x] TASK-081: Permission Prompts
 
 ## Phase 9 — AI and MCP
 
