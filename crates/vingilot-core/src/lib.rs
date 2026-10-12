@@ -6,6 +6,7 @@ pub mod db;
 pub mod error;
 pub mod models;
 pub mod profile_manager;
+pub mod reader;
 pub mod repositories;
 pub mod search_engine_manager;
 
@@ -15,6 +16,7 @@ pub use db::Database;
 pub use error::{CoreError, CoreResult};
 pub use models::*;
 pub use profile_manager::ProfileManager;
+pub use reader::{ExtractedArticle, ReaderExtractor};
 pub use repositories::*;
 pub use search_engine_manager::SearchEngineManager;
 

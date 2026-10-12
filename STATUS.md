@@ -45,9 +45,9 @@
 
 ## Phase 7 — Reading Mode and Themes
 
-- [ ] TASK-070: Reading Mode Extraction
-- [ ] TASK-071: Reader View UI
-- [ ] TASK-072: True Black Theme
+- [x] TASK-070: Reading Mode Extraction
+- [x] TASK-071: Reader View UI
+- [x] TASK-072: True Black Theme
 
 ## Phase 8 — Downloads and Permissions
 
