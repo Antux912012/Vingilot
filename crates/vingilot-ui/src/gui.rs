@@ -134,6 +134,10 @@ struct GtkBindings {
         *mut libc::c_double,
     ) -> c_int,
     gtk_event_controller_get_widget: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    gtk_css_provider_new: unsafe extern "C" fn() -> *mut c_void,
+    gtk_css_provider_load_from_string: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_style_context_add_provider_for_display:
+        unsafe extern "C" fn(*mut c_void, *mut c_void, libc::c_uint),
 
     // WebKitGTK
     webkit_web_view_new: unsafe extern "C" fn() -> *mut c_void,
@@ -327,6 +331,15 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_widget_add_controller: load_symbol(libgtk, "gtk_widget_add_controller")?,
         gtk_widget_translate_coordinates: load_symbol(libgtk, "gtk_widget_translate_coordinates")?,
         gtk_event_controller_get_widget: load_symbol(libgtk, "gtk_event_controller_get_widget")?,
+        gtk_css_provider_new: load_symbol(libgtk, "gtk_css_provider_new")?,
+        gtk_css_provider_load_from_string: load_symbol(
+            libgtk,
+            "gtk_css_provider_load_from_string",
+        )?,
+        gtk_style_context_add_provider_for_display: load_symbol(
+            libgtk,
+            "gtk_style_context_add_provider_for_display",
+        )?,
 
         webkit_web_view_new: load_symbol(libwebkit, "webkit_web_view_new")?,
         webkit_web_view_load_uri: load_symbol(libwebkit, "webkit_web_view_load_uri")?,
@@ -1434,15 +1447,37 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_window_set_title)(win, title.as_ptr());
     (b.gtk_window_set_default_size)(win, 1100, 750);
 
+    // Apply unified chrome CSS styling for seamless headerbar and sidebar integration
+    let display = (b.gdk_display_get_default)();
+    if !display.is_null() {
+        let provider = (b.gtk_css_provider_new)();
+        let css = crate::theme::base_css();
+        if let Ok(c_css) = CString::new(css) {
+            (b.gtk_css_provider_load_from_string)(provider, c_css.as_ptr());
+            (b.gtk_style_context_add_provider_for_display)(
+                display, provider, 600, // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
+            );
+        }
+    }
+
     // Header bar
     let header = (b.adw_header_bar_new)();
 
     // Sidebar toggle button (3 horizontal lines hamburger menu)
-    let hamburger_icon = CString::new("vingilot-hamburger-symbolic").unwrap();
+    let hamburger_icon = CString::new("open-menu-symbolic").unwrap();
     let btn_sidebar = (b.gtk_button_new_from_icon_name)(hamburger_icon.as_ptr());
     let sidebar_tip = CString::new("Toggle Tab Sidebar").unwrap();
     (b.gtk_widget_set_tooltip_text)(btn_sidebar, sidebar_tip.as_ptr());
+    (b.gtk_widget_set_size_request)(btn_sidebar, 38, 38);
+    (b.gtk_widget_set_margin_start)(btn_sidebar, 5);
+    (b.gtk_widget_set_margin_end)(btn_sidebar, 5);
     (b.adw_header_bar_pack_start)(header, btn_sidebar);
+
+    // Vertical separator in headerbar aligned with the sidebar boundary
+    let header_sep = (b.gtk_separator_new)(1); // 1 = GTK_ORIENTATION_VERTICAL
+    (b.gtk_widget_set_margin_start)(header_sep, 2);
+    (b.gtk_widget_set_margin_end)(header_sep, 4);
+    (b.adw_header_bar_pack_start)(header, header_sep);
 
     // Navigation buttons
     let back_icon = CString::new("go-previous-symbolic").unwrap();

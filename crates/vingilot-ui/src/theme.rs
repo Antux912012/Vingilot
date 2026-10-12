@@ -30,7 +30,7 @@ impl AppTheme {
                 }
                 headerbar, .header-bar {
                     background-color: #000000;
-                    border-bottom: 1px solid #1a1a1a;
+                    border-bottom: none;
                 }
                 entry, .address-entry {
                     background-color: #0a0a0a;
@@ -41,11 +41,89 @@ impl AppTheme {
                     background-color: #000000;
                     border-right: 1px solid #1a1a1a;
                 }
+                paned > :last-child {
+                    border-top: 1px solid #1a1a1a;
+                    background-color: #000000;
+                }
                 "#,
             ),
             _ => None,
         }
     }
+}
+
+/// Returns the base CSS styling to unify the header bar and the sidebar seamlessly.
+pub fn base_css() -> &'static str {
+    r#"
+    /* Unified Chrome Shell - Headerbar & Sidebar seamless integration */
+    window, .background {
+        background-color: @headerbar_bg_color;
+    }
+
+    headerbar {
+        background-color: @headerbar_bg_color;
+        border-bottom: none;
+        box-shadow: none;
+        padding-left: 0px;
+    }
+
+    .sidebar {
+        background-color: @headerbar_bg_color;
+        border-right: 1px solid alpha(currentColor, 0.12);
+    }
+
+    /* Paned styling: background matches chrome, webview gets clean top border */
+    paned {
+        background-color: @headerbar_bg_color;
+    }
+
+    paned > :last-child {
+        border-top: 1px solid alpha(currentColor, 0.12);
+        background-color: @window_bg_color;
+    }
+
+    paned separator {
+        background: transparent;
+        border-right: 1px solid alpha(currentColor, 0.12);
+        min-width: 1px;
+    }
+
+    /* Tab and sidebar action buttons matching top bar appearance */
+    .sidebar button {
+        border-radius: 8px;
+        margin: 2px 4px;
+        padding: 0;
+        min-height: 36px;
+        background: transparent;
+        border: none;
+        transition: background-color 150ms ease, color 150ms ease;
+    }
+
+    .sidebar button:hover {
+        background-color: alpha(currentColor, 0.08);
+    }
+
+    .sidebar button:active {
+        background-color: alpha(currentColor, 0.14);
+    }
+
+    .sidebar button.suggested-action {
+        background-color: alpha(@accent_color, 0.22);
+        color: @accent_color;
+        font-weight: 600;
+    }
+
+    .sidebar button.suggested-action:hover {
+        background-color: alpha(@accent_color, 0.32);
+    }
+
+    /* Horizontal separator inside sidebar dividing pinned and normal tabs */
+    .sidebar separator {
+        background-color: alpha(currentColor, 0.12);
+        min-height: 1px;
+        margin: 6px 8px;
+    }
+    "#
 }
 
 /// Theme manager coordinating window theme switching.
