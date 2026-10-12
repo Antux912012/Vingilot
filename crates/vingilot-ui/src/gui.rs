@@ -10,6 +10,10 @@ static ACTIVE_WEBVIEW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_POPOVER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_ZOOM_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_LENS_BTN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_SIDEBAR_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_TAB_LIST_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static TAB_MANAGER: Mutex<Option<crate::tabs::TabManager>> = Mutex::new(None);
 
 #[derive(Clone, Copy)]
 struct GtkBindings {
@@ -57,19 +61,34 @@ struct GtkBindings {
     gtk_window_present: unsafe extern "C" fn(*mut c_void),
     gtk_box_new: unsafe extern "C" fn(c_int, c_int) -> *mut c_void,
     gtk_box_append: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_box_remove: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_widget_set_vexpand: unsafe extern "C" fn(*mut c_void, c_int),
     gtk_widget_set_hexpand: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_widget_set_size_request: unsafe extern "C" fn(*mut c_void, c_int, c_int),
+    gtk_widget_set_visible: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_widget_get_visible: unsafe extern "C" fn(*mut c_void) -> c_int,
+    gtk_widget_get_first_child: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    gtk_widget_add_css_class: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_scrolled_window_new: unsafe extern "C" fn() -> *mut c_void,
+    gtk_scrolled_window_set_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_scrolled_window_set_policy: unsafe extern "C" fn(*mut c_void, c_int, c_int),
+    gtk_button_new: unsafe extern "C" fn() -> *mut c_void,
     gtk_button_new_from_icon_name: unsafe extern "C" fn(*const c_char) -> *mut c_void,
     gtk_button_new_with_label: unsafe extern "C" fn(*const c_char) -> *mut c_void,
+    gtk_button_set_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_button_set_has_frame: unsafe extern "C" fn(*mut c_void, c_int),
     gtk_menu_button_new: unsafe extern "C" fn() -> *mut c_void,
     gtk_menu_button_set_icon_name: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_menu_button_set_label: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_menu_button_set_has_frame: unsafe extern "C" fn(*mut c_void, c_int),
     gtk_menu_button_set_popover: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_popover_new: unsafe extern "C" fn() -> *mut c_void,
     gtk_popover_set_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_popover_popdown: unsafe extern "C" fn(*mut c_void),
     gtk_label_new: unsafe extern "C" fn(*const c_char) -> *mut c_void,
     gtk_label_set_text: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_label_set_xalign: unsafe extern "C" fn(*mut c_void, libc::c_float),
+    gtk_label_set_ellipsize: unsafe extern "C" fn(*mut c_void, c_int),
     gtk_separator_new: unsafe extern "C" fn(c_int) -> *mut c_void,
     gtk_widget_set_margin_start: unsafe extern "C" fn(*mut c_void, c_int),
     gtk_widget_set_margin_end: unsafe extern "C" fn(*mut c_void, c_int),
@@ -84,6 +103,8 @@ struct GtkBindings {
     // WebKitGTK
     webkit_web_view_new: unsafe extern "C" fn() -> *mut c_void,
     webkit_web_view_load_uri: unsafe extern "C" fn(*mut c_void, *const c_char),
+    webkit_web_view_get_uri: unsafe extern "C" fn(*mut c_void) -> *const c_char,
+    webkit_web_view_get_title: unsafe extern "C" fn(*mut c_void) -> *const c_char,
     webkit_web_view_go_back: unsafe extern "C" fn(*mut c_void),
     webkit_web_view_go_forward: unsafe extern "C" fn(*mut c_void),
     webkit_web_view_reload: unsafe extern "C" fn(*mut c_void),
@@ -210,19 +231,34 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_window_present: load_symbol(libgtk, "gtk_window_present")?,
         gtk_box_new: load_symbol(libgtk, "gtk_box_new")?,
         gtk_box_append: load_symbol(libgtk, "gtk_box_append")?,
+        gtk_box_remove: load_symbol(libgtk, "gtk_box_remove")?,
         gtk_widget_set_vexpand: load_symbol(libgtk, "gtk_widget_set_vexpand")?,
         gtk_widget_set_hexpand: load_symbol(libgtk, "gtk_widget_set_hexpand")?,
+        gtk_widget_set_size_request: load_symbol(libgtk, "gtk_widget_set_size_request")?,
+        gtk_widget_set_visible: load_symbol(libgtk, "gtk_widget_set_visible")?,
+        gtk_widget_get_visible: load_symbol(libgtk, "gtk_widget_get_visible")?,
+        gtk_widget_get_first_child: load_symbol(libgtk, "gtk_widget_get_first_child")?,
+        gtk_widget_add_css_class: load_symbol(libgtk, "gtk_widget_add_css_class")?,
+        gtk_scrolled_window_new: load_symbol(libgtk, "gtk_scrolled_window_new")?,
+        gtk_scrolled_window_set_child: load_symbol(libgtk, "gtk_scrolled_window_set_child")?,
+        gtk_scrolled_window_set_policy: load_symbol(libgtk, "gtk_scrolled_window_set_policy")?,
+        gtk_button_new: load_symbol(libgtk, "gtk_button_new")?,
         gtk_button_new_from_icon_name: load_symbol(libgtk, "gtk_button_new_from_icon_name")?,
         gtk_button_new_with_label: load_symbol(libgtk, "gtk_button_new_with_label")?,
+        gtk_button_set_child: load_symbol(libgtk, "gtk_button_set_child")?,
         gtk_button_set_has_frame: load_symbol(libgtk, "gtk_button_set_has_frame")?,
         gtk_menu_button_new: load_symbol(libgtk, "gtk_menu_button_new")?,
         gtk_menu_button_set_icon_name: load_symbol(libgtk, "gtk_menu_button_set_icon_name")?,
+        gtk_menu_button_set_label: load_symbol(libgtk, "gtk_menu_button_set_label")?,
+        gtk_menu_button_set_has_frame: load_symbol(libgtk, "gtk_menu_button_set_has_frame")?,
         gtk_menu_button_set_popover: load_symbol(libgtk, "gtk_menu_button_set_popover")?,
         gtk_popover_new: load_symbol(libgtk, "gtk_popover_new")?,
         gtk_popover_set_child: load_symbol(libgtk, "gtk_popover_set_child")?,
         gtk_popover_popdown: load_symbol(libgtk, "gtk_popover_popdown")?,
         gtk_label_new: load_symbol(libgtk, "gtk_label_new")?,
         gtk_label_set_text: load_symbol(libgtk, "gtk_label_set_text")?,
+        gtk_label_set_xalign: load_symbol(libgtk, "gtk_label_set_xalign")?,
+        gtk_label_set_ellipsize: load_symbol(libgtk, "gtk_label_set_ellipsize")?,
         gtk_separator_new: load_symbol(libgtk, "gtk_separator_new")?,
         gtk_widget_set_margin_start: load_symbol(libgtk, "gtk_widget_set_margin_start")?,
         gtk_widget_set_margin_end: load_symbol(libgtk, "gtk_widget_set_margin_end")?,
@@ -236,6 +272,8 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
 
         webkit_web_view_new: load_symbol(libwebkit, "webkit_web_view_new")?,
         webkit_web_view_load_uri: load_symbol(libwebkit, "webkit_web_view_load_uri")?,
+        webkit_web_view_get_uri: load_symbol(libwebkit, "webkit_web_view_get_uri")?,
+        webkit_web_view_get_title: load_symbol(libwebkit, "webkit_web_view_get_title")?,
         webkit_web_view_go_back: load_symbol(libwebkit, "webkit_web_view_go_back")?,
         webkit_web_view_go_forward: load_symbol(libwebkit, "webkit_web_view_go_forward")?,
         webkit_web_view_reload: load_symbol(libwebkit, "webkit_web_view_reload")?,
@@ -306,6 +344,260 @@ unsafe extern "C" fn on_entry_activate(entry: *mut c_void, _user_data: *mut c_vo
     }
 }
 
+unsafe fn refresh_sidebar_tabs() {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let list_box = ACTIVE_TAB_LIST_BOX.load(Ordering::SeqCst);
+    if list_box.is_null() {
+        return;
+    }
+
+    // Clear existing children
+    loop {
+        let child = (b.gtk_widget_get_first_child)(list_box);
+        if child.is_null() {
+            break;
+        }
+        (b.gtk_box_remove)(list_box, child);
+    }
+
+    let clicked_sig = CString::new("clicked").unwrap();
+    let cb_select = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_tab_row_clicked,
+    );
+    let cb_close = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_tab_close_clicked,
+    );
+
+    let tab_manager_guard = match TAB_MANAGER.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+
+    if let Some(mgr) = tab_manager_guard.as_ref() {
+        let active_idx = mgr.active_index();
+        let total = mgr.tabs().len();
+
+        for (idx, tab) in mgr.tabs().iter().enumerate() {
+            let row_box = (b.gtk_box_new)(0, 4); // Horizontal box
+            (b.gtk_widget_set_hexpand)(row_box, 1);
+            (b.gtk_widget_set_margin_start)(row_box, 4);
+            (b.gtk_widget_set_margin_end)(row_box, 4);
+            (b.gtk_widget_set_margin_top)(row_box, 2);
+            (b.gtk_widget_set_margin_bottom)(row_box, 2);
+
+            let tab_icon = if tab.is_incognito { "🌊 " } else { "🌐 " };
+            let label_text = format!("{}{}", tab_icon, tab.title);
+            let c_title = CString::new(label_text).unwrap();
+
+            let select_btn = (b.gtk_button_new)();
+            let lbl_tab = (b.gtk_label_new)(c_title.as_ptr());
+            (b.gtk_label_set_xalign)(lbl_tab, 0.0);
+            (b.gtk_label_set_ellipsize)(lbl_tab, 3); // PANGO_ELLIPSIZE_END
+            (b.gtk_button_set_child)(select_btn, lbl_tab);
+            (b.gtk_widget_set_hexpand)(select_btn, 1);
+            (b.gtk_button_set_has_frame)(select_btn, 0);
+
+            if idx == active_idx {
+                let active_class = CString::new("suggested-action").unwrap();
+                (b.gtk_widget_add_css_class)(select_btn, active_class.as_ptr());
+            }
+
+            (b.g_signal_connect_data)(
+                select_btn,
+                clicked_sig.as_ptr(),
+                cb_select,
+                idx as *mut c_void,
+                std::ptr::null_mut(),
+                0,
+            );
+            (b.gtk_box_append)(row_box, select_btn);
+
+            if total > 1 {
+                let close_icon = CString::new("window-close-symbolic").unwrap();
+                let close_btn = (b.gtk_button_new_from_icon_name)(close_icon.as_ptr());
+                (b.gtk_button_set_has_frame)(close_btn, 0);
+                (b.g_signal_connect_data)(
+                    close_btn,
+                    clicked_sig.as_ptr(),
+                    cb_close,
+                    idx as *mut c_void,
+                    std::ptr::null_mut(),
+                    0,
+                );
+                (b.gtk_box_append)(row_box, close_btn);
+            }
+
+            (b.gtk_box_append)(list_box, row_box);
+        }
+    }
+}
+
+unsafe extern "C" fn on_tab_row_clicked(_button: *mut c_void, user_data: *mut c_void) {
+    let idx = user_data as usize;
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+
+    let mut url_to_load = None;
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        if let Some(mgr) = mgr_guard.as_mut() {
+            // Save active tab's current URL before switching
+            if !webview.is_null() {
+                let current_uri_ptr = (b.webkit_web_view_get_uri)(webview);
+                if !current_uri_ptr.is_null() {
+                    let cur_uri = CStr::from_ptr(current_uri_ptr)
+                        .to_string_lossy()
+                        .to_string();
+                    if let Some(active) = mgr.active_tab_mut() {
+                        active.url = cur_uri.clone();
+                        let title_ptr = (b.webkit_web_view_get_title)(webview);
+                        let page_title = if !title_ptr.is_null() {
+                            let t = CStr::from_ptr(title_ptr)
+                                .to_string_lossy()
+                                .trim()
+                                .to_string();
+                            if t.is_empty() {
+                                None
+                            } else {
+                                Some(t)
+                            }
+                        } else {
+                            None
+                        };
+
+                        active.title = if active.is_incognito {
+                            "Navigating Shadowy Seas".to_string()
+                        } else if let Some(t) = page_title {
+                            t
+                        } else if cur_uri.is_empty() || cur_uri == "about:blank" {
+                            "New Tab".to_string()
+                        } else {
+                            cur_uri.clone()
+                        };
+                    }
+                }
+            }
+
+            if mgr.switch_tab(idx) {
+                if let Some(tab) = mgr.active_tab() {
+                    url_to_load = Some(tab.url.clone());
+                }
+            }
+        }
+    }
+
+    if let Some(url) = url_to_load {
+        if !webview.is_null() {
+            if let Ok(c_url) = CString::new(url.clone()) {
+                (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
+            }
+        }
+        if !entry.is_null() {
+            if let Ok(c_url) = CString::new(url) {
+                (b.gtk_editable_set_text)(entry, c_url.as_ptr());
+            }
+        }
+    }
+
+    refresh_sidebar_tabs();
+}
+
+unsafe extern "C" fn on_tab_close_clicked(_button: *mut c_void, user_data: *mut c_void) {
+    let idx = user_data as usize;
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+
+    let mut url_to_load = None;
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        if let Some(mgr) = mgr_guard.as_mut() {
+            mgr.close_tab(idx);
+            if let Some(tab) = mgr.active_tab() {
+                url_to_load = Some(tab.url.clone());
+            }
+        }
+    }
+
+    if let Some(url) = url_to_load {
+        if !webview.is_null() {
+            if let Ok(c_url) = CString::new(url.clone()) {
+                (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
+            }
+        }
+        if !entry.is_null() {
+            if let Ok(c_url) = CString::new(url) {
+                (b.gtk_editable_set_text)(entry, c_url.as_ptr());
+            }
+        }
+    }
+
+    refresh_sidebar_tabs();
+}
+
+unsafe extern "C" fn on_sidebar_new_tab_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+
+    let home = "https://duckduckgo.com".to_string();
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        if let Some(mgr) = mgr_guard.as_mut() {
+            // Save active tab state
+            if !webview.is_null() {
+                let current_uri_ptr = (b.webkit_web_view_get_uri)(webview);
+                if !current_uri_ptr.is_null() {
+                    let cur_uri = CStr::from_ptr(current_uri_ptr)
+                        .to_string_lossy()
+                        .to_string();
+                    if let Some(active) = mgr.active_tab_mut() {
+                        active.url = cur_uri.clone();
+                    }
+                }
+            }
+
+            mgr.new_tab();
+            if let Some(active) = mgr.active_tab_mut() {
+                active.url = home.clone();
+                active.title = "DuckDuckGo".to_string();
+            }
+        }
+    }
+
+    if !webview.is_null() {
+        let c_home = CString::new(home.clone()).unwrap();
+        (b.webkit_web_view_load_uri)(webview, c_home.as_ptr());
+    }
+    if !entry.is_null() {
+        let c_home = CString::new(home).unwrap();
+        (b.gtk_editable_set_text)(entry, c_home.as_ptr());
+    }
+
+    refresh_sidebar_tabs();
+}
+
+unsafe extern "C" fn on_toggle_sidebar_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    let sidebar = ACTIVE_SIDEBAR_BOX.load(Ordering::SeqCst);
+    if sidebar.is_null() {
+        return;
+    }
+    if let Some(b) = BINDINGS.get() {
+        let visible = (b.gtk_widget_get_visible)(sidebar);
+        (b.gtk_widget_set_visible)(sidebar, if visible != 0 { 0 } else { 1 });
+    }
+}
+
 unsafe extern "C" fn on_new_tab_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
     if !popover.is_null() {
@@ -313,18 +605,7 @@ unsafe extern "C" fn on_new_tab_clicked(_button: *mut c_void, _user_data: *mut c
             (b.gtk_popover_popdown)(popover);
         }
     }
-    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
-    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
-    if webview.is_null() {
-        return;
-    }
-    if let Some(b) = BINDINGS.get() {
-        let home = CString::new("https://duckduckgo.com").unwrap();
-        (b.webkit_web_view_load_uri)(webview, home.as_ptr());
-        if !entry.is_null() {
-            (b.gtk_editable_set_text)(entry, home.as_ptr());
-        }
-    }
+    on_sidebar_new_tab_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
 unsafe extern "C" fn on_new_incognito_clicked(_button: *mut c_void, _user_data: *mut c_void) {
@@ -339,6 +620,29 @@ unsafe extern "C" fn on_new_incognito_clicked(_button: *mut c_void, _user_data: 
         .spawn();
 }
 
+unsafe fn update_zoom_display(zoom: f64) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let lbl = ACTIVE_ZOOM_LABEL.load(Ordering::SeqCst);
+    let lens_btn = ACTIVE_LENS_BTN.load(Ordering::SeqCst);
+    let pct_text = format!("{:.0}%", zoom * 100.0);
+
+    if !lbl.is_null() {
+        if let Ok(c_text) = CString::new(pct_text.clone()) {
+            (b.gtk_label_set_text)(lbl, c_text.as_ptr());
+        }
+    }
+
+    if !lens_btn.is_null() {
+        let lens_label = format!("🔍 {}", pct_text);
+        if let Ok(c_label) = CString::new(lens_label) {
+            (b.gtk_menu_button_set_label)(lens_btn, c_label.as_ptr());
+        }
+    }
+}
+
 unsafe extern "C" fn on_zoom_in_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
     if webview.is_null() {
@@ -348,14 +652,7 @@ unsafe extern "C" fn on_zoom_in_clicked(_button: *mut c_void, _user_data: *mut c
         let current = (b.webkit_web_view_get_zoom_level)(webview);
         let new_zoom = (current + 0.1).min(3.0);
         (b.webkit_web_view_set_zoom_level)(webview, new_zoom);
-
-        let lbl = ACTIVE_ZOOM_LABEL.load(Ordering::SeqCst);
-        if !lbl.is_null() {
-            let text = format!("{:.0}%", new_zoom * 100.0);
-            if let Ok(c_text) = CString::new(text) {
-                (b.gtk_label_set_text)(lbl, c_text.as_ptr());
-            }
-        }
+        update_zoom_display(new_zoom);
     }
 }
 
@@ -368,14 +665,7 @@ unsafe extern "C" fn on_zoom_out_clicked(_button: *mut c_void, _user_data: *mut 
         let current = (b.webkit_web_view_get_zoom_level)(webview);
         let new_zoom = (current - 0.1).max(0.5);
         (b.webkit_web_view_set_zoom_level)(webview, new_zoom);
-
-        let lbl = ACTIVE_ZOOM_LABEL.load(Ordering::SeqCst);
-        if !lbl.is_null() {
-            let text = format!("{:.0}%", new_zoom * 100.0);
-            if let Ok(c_text) = CString::new(text) {
-                (b.gtk_label_set_text)(lbl, c_text.as_ptr());
-            }
-        }
+        update_zoom_display(new_zoom);
     }
 }
 
@@ -386,14 +676,39 @@ unsafe extern "C" fn on_zoom_reset_clicked(_button: *mut c_void, _user_data: *mu
     }
     if let Some(b) = BINDINGS.get() {
         (b.webkit_web_view_set_zoom_level)(webview, 1.0);
-
-        let lbl = ACTIVE_ZOOM_LABEL.load(Ordering::SeqCst);
-        if !lbl.is_null() {
-            if let Ok(c_text) = CString::new("100%") {
-                (b.gtk_label_set_text)(lbl, c_text.as_ptr());
-            }
-        }
+        update_zoom_display(1.0);
     }
+}
+
+unsafe extern "C" fn on_lens_popover_closed(_popover: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let lens_btn = ACTIVE_LENS_BTN.load(Ordering::SeqCst);
+    if !lens_btn.is_null() {
+        (b.gtk_menu_button_set_label)(lens_btn, std::ptr::null());
+        let icon_name = CString::new("system-search-symbolic").unwrap();
+        (b.gtk_menu_button_set_icon_name)(lens_btn, icon_name.as_ptr());
+    }
+}
+
+unsafe extern "C" fn on_lens_button_notify_active(
+    _btn: *mut c_void,
+    _pspec: *mut c_void,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
+    let zoom = if !webview.is_null() {
+        (b.webkit_web_view_get_zoom_level)(webview)
+    } else {
+        1.0
+    };
+    update_zoom_display(zoom);
 }
 
 unsafe extern "C" fn on_history_clicked(_button: *mut c_void, _user_data: *mut c_void) {
@@ -712,6 +1027,13 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Header bar
     let header = (b.adw_header_bar_new)();
 
+    // Sidebar toggle button
+    let sidebar_icon = CString::new("view-sidebar-symbolic").unwrap();
+    let btn_sidebar = (b.gtk_button_new_from_icon_name)(sidebar_icon.as_ptr());
+    let sidebar_tip = CString::new("Toggle Tab Sidebar").unwrap();
+    (b.gtk_widget_set_tooltip_text)(btn_sidebar, sidebar_tip.as_ptr());
+    (b.adw_header_bar_pack_start)(header, btn_sidebar);
+
     // Navigation buttons
     let back_icon = CString::new("go-previous-symbolic").unwrap();
     let btn_back = (b.gtk_button_new_from_icon_name)(back_icon.as_ptr());
@@ -726,10 +1048,47 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.adw_header_bar_pack_start)(header, btn_fwd);
     (b.adw_header_bar_pack_start)(header, btn_refresh);
 
-    // Address bar entry
+    // Address bar entry & Lens Zoom button in title container
+    let title_box = (b.gtk_box_new)(0, 4); // 0 = GTK_ORIENTATION_HORIZONTAL, 4px spacing
+    (b.gtk_widget_set_hexpand)(title_box, 1);
+
+    // Lens zoom button on left of URL entry
+    let lens_btn = (b.gtk_menu_button_new)();
+    ACTIVE_LENS_BTN.store(lens_btn, Ordering::SeqCst);
+    let lens_icon = CString::new("system-search-symbolic").unwrap();
+    (b.gtk_menu_button_set_icon_name)(lens_btn, lens_icon.as_ptr());
+    let lens_tip = CString::new("Page Zoom").unwrap();
+    (b.gtk_widget_set_tooltip_text)(lens_btn, lens_tip.as_ptr());
+    (b.gtk_menu_button_set_has_frame)(lens_btn, 0);
+
+    // Lens Popover
+    let lens_popover = (b.gtk_popover_new)();
+    (b.gtk_menu_button_set_popover)(lens_btn, lens_popover);
+
+    let lens_box = (b.gtk_box_new)(1, 6); // 1 = GTK_ORIENTATION_VERTICAL, 6px spacing
+    (b.gtk_widget_set_margin_start)(lens_box, 10);
+    (b.gtk_widget_set_margin_end)(lens_box, 10);
+    (b.gtk_widget_set_margin_top)(lens_box, 8);
+    (b.gtk_widget_set_margin_bottom)(lens_box, 8);
+    (b.gtk_popover_set_child)(lens_popover, lens_box);
+
+    let lens_ctrl_box = (b.gtk_box_new)(0, 6); // Horizontal
+    let btn_lens_out = (b.gtk_button_new_with_label)(CString::new(" − ").unwrap().as_ptr());
+    let lbl_lens_val = (b.gtk_label_new)(CString::new("100%").unwrap().as_ptr());
+    ACTIVE_ZOOM_LABEL.store(lbl_lens_val, Ordering::SeqCst);
+    (b.gtk_widget_set_margin_start)(lbl_lens_val, 6);
+    (b.gtk_widget_set_margin_end)(lbl_lens_val, 6);
+    let btn_lens_in = (b.gtk_button_new_with_label)(CString::new(" + ").unwrap().as_ptr());
+    let btn_lens_reset = (b.gtk_button_new_with_label)(CString::new("↺ Reset").unwrap().as_ptr());
+
+    (b.gtk_box_append)(lens_ctrl_box, btn_lens_out);
+    (b.gtk_box_append)(lens_ctrl_box, lbl_lens_val);
+    (b.gtk_box_append)(lens_ctrl_box, btn_lens_in);
+    (b.gtk_box_append)(lens_ctrl_box, btn_lens_reset);
+    (b.gtk_box_append)(lens_box, lens_ctrl_box);
+
     let entry = (b.gtk_entry_new)();
     ACTIVE_ENTRY.store(entry, Ordering::SeqCst);
-
     let placeholder = CString::new("Search or enter web address...").unwrap();
     (b.gtk_entry_set_placeholder_text)(entry, placeholder.as_ptr());
     (b.gtk_widget_set_hexpand)(entry, 1);
@@ -743,7 +1102,25 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     if let Ok(c_start_url) = CString::new(start_url.clone()) {
         (b.gtk_editable_set_text)(entry, c_start_url.as_ptr());
     }
-    (b.adw_header_bar_set_title_widget)(header, entry);
+
+    (b.gtk_box_append)(title_box, lens_btn);
+    (b.gtk_box_append)(title_box, entry);
+    (b.adw_header_bar_set_title_widget)(header, title_box);
+
+    // Initialize TabManager
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        let mut mgr = crate::tabs::TabManager::new();
+        if let Some(tab) = mgr.active_tab_mut() {
+            tab.url = start_url.clone();
+            tab.title = if is_incognito {
+                "Navigating Shadowy Seas".to_string()
+            } else {
+                "DuckDuckGo".to_string()
+            };
+            tab.is_incognito = is_incognito;
+        }
+        *mgr_guard = Some(mgr);
+    }
 
     // Store active window pointer
     ACTIVE_WINDOW.store(win, Ordering::SeqCst);
@@ -782,48 +1159,22 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let sep1 = (b.gtk_separator_new)(0);
     (b.gtk_box_append)(menu_box, sep1);
 
-    // 3. Zoom Controls Row
-    let zoom_box = (b.gtk_box_new)(0, 6); // 0 = GTK_ORIENTATION_HORIZONTAL, 6px spacing
-    (b.gtk_widget_set_margin_start)(zoom_box, 6);
-    (b.gtk_widget_set_margin_end)(zoom_box, 6);
-    (b.gtk_widget_set_margin_top)(zoom_box, 2);
-    (b.gtk_widget_set_margin_bottom)(zoom_box, 2);
-
-    let lbl_zoom_title = (b.gtk_label_new)(CString::new("Zoom:").unwrap().as_ptr());
-    (b.gtk_widget_set_hexpand)(lbl_zoom_title, 1);
-    let btn_zoom_out = (b.gtk_button_new_with_label)(CString::new(" − ").unwrap().as_ptr());
-    let lbl_zoom_val = (b.gtk_label_new)(CString::new("100%").unwrap().as_ptr());
-    ACTIVE_ZOOM_LABEL.store(lbl_zoom_val, Ordering::SeqCst);
-    let btn_zoom_in = (b.gtk_button_new_with_label)(CString::new(" + ").unwrap().as_ptr());
-    let btn_zoom_reset = (b.gtk_button_new_with_label)(CString::new("Reset").unwrap().as_ptr());
-
-    (b.gtk_box_append)(zoom_box, lbl_zoom_title);
-    (b.gtk_box_append)(zoom_box, btn_zoom_out);
-    (b.gtk_box_append)(zoom_box, lbl_zoom_val);
-    (b.gtk_box_append)(zoom_box, btn_zoom_in);
-    (b.gtk_box_append)(zoom_box, btn_zoom_reset);
-    (b.gtk_box_append)(menu_box, zoom_box);
-
-    // Separator
-    let sep2 = (b.gtk_separator_new)(0);
-    (b.gtk_box_append)(menu_box, sep2);
-
-    // 4. History & Bookmarks
+    // 3. History & Bookmarks
     let btn_history =
         (b.gtk_button_new_with_label)(CString::new("🕒  History & Bookmarks").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_history, 0);
     (b.gtk_box_append)(menu_box, btn_history);
 
     // Separator
-    let sep3 = (b.gtk_separator_new)(0);
-    (b.gtk_box_append)(menu_box, sep3);
+    let sep2 = (b.gtk_separator_new)(0);
+    (b.gtk_box_append)(menu_box, sep2);
 
-    // 5. Preferences
+    // 4. Preferences
     let btn_prefs = (b.gtk_button_new_with_label)(CString::new("⚙  Preferences").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_prefs, 0);
     (b.gtk_box_append)(menu_box, btn_prefs);
 
-    // 6. About Vingilot
+    // 5. About Vingilot
     let btn_about =
         (b.gtk_button_new_with_label)(CString::new("ℹ  About Vingilot").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_about, 0);
@@ -849,9 +1200,82 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         (b.webkit_web_view_load_uri)(webview, c_start_url.as_ptr());
     }
 
+    // Create Sidebar container (left side)
+    let sidebar_box = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
+    ACTIVE_SIDEBAR_BOX.store(sidebar_box, Ordering::SeqCst);
+    (b.gtk_widget_set_size_request)(sidebar_box, 230, -1);
+
+    // Sidebar header with "Tabs" and "+" button
+    let sidebar_header_box = (b.gtk_box_new)(0, 6); // Horizontal
+    (b.gtk_widget_set_margin_start)(sidebar_header_box, 8);
+    (b.gtk_widget_set_margin_end)(sidebar_header_box, 8);
+    (b.gtk_widget_set_margin_top)(sidebar_header_box, 6);
+    (b.gtk_widget_set_margin_bottom)(sidebar_header_box, 6);
+
+    let lbl_tabs_title = (b.gtk_label_new)(CString::new("Open Tabs").unwrap().as_ptr());
+    (b.gtk_widget_set_hexpand)(lbl_tabs_title, 1);
+    (b.gtk_label_set_xalign)(lbl_tabs_title, 0.0);
+
+    let add_icon = CString::new("list-add-symbolic").unwrap();
+    let btn_sidebar_add = (b.gtk_button_new_from_icon_name)(add_icon.as_ptr());
+    (b.gtk_button_set_has_frame)(btn_sidebar_add, 0);
+    let add_tip = CString::new("Open New Tab").unwrap();
+    (b.gtk_widget_set_tooltip_text)(btn_sidebar_add, add_tip.as_ptr());
+
+    (b.gtk_box_append)(sidebar_header_box, lbl_tabs_title);
+    (b.gtk_box_append)(sidebar_header_box, btn_sidebar_add);
+    (b.gtk_box_append)(sidebar_box, sidebar_header_box);
+
+    let sidebar_sep = (b.gtk_separator_new)(0);
+    (b.gtk_box_append)(sidebar_box, sidebar_sep);
+
+    // Tab list container inside ScrolledWindow
+    let tab_scrolled = (b.gtk_scrolled_window_new)();
+    (b.gtk_widget_set_vexpand)(tab_scrolled, 1);
+    (b.gtk_scrolled_window_set_policy)(tab_scrolled, 1, 2); // H=Never, V=Automatic
+
+    let tab_list_box = (b.gtk_box_new)(1, 2); // Vertical
+    ACTIVE_TAB_LIST_BOX.store(tab_list_box, Ordering::SeqCst);
+    (b.gtk_widget_set_margin_top)(tab_list_box, 4);
+    (b.gtk_widget_set_margin_bottom)(tab_list_box, 4);
+    (b.gtk_scrolled_window_set_child)(tab_scrolled, tab_list_box);
+    (b.gtk_box_append)(sidebar_box, tab_scrolled);
+
+    // Divider between sidebar and webview
+    let vsep = (b.gtk_separator_new)(1); // Vertical separator
+
+    // Content container: sidebar on left, separator, webview on right
+    let content_box = (b.gtk_box_new)(0, 0); // 0 = GTK_ORIENTATION_HORIZONTAL
+    (b.gtk_widget_set_vexpand)(content_box, 1);
+    (b.gtk_widget_set_hexpand)(content_box, 1);
+    (b.gtk_box_append)(content_box, sidebar_box);
+    (b.gtk_box_append)(content_box, vsep);
+    (b.gtk_box_append)(content_box, webview);
+
+    // Populate initial tab in sidebar
+    refresh_sidebar_tabs();
+
     // Connect signals
     let clicked_sig = CString::new("clicked").unwrap();
     let activate_sig = CString::new("activate").unwrap();
+    let closed_sig = CString::new("closed").unwrap();
+    let notify_active_sig = CString::new("notify::active").unwrap();
+
+    let cb_sidebar = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_toggle_sidebar_clicked,
+    );
+    let cb_sidebar_add = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_sidebar_new_tab_clicked);
+    let cb_lens_closed = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_lens_popover_closed);
+    let cb_lens_notify = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+        GCallback,
+    >(on_lens_button_notify_active);
 
     let cb_back = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
         on_back_clicked,
@@ -894,6 +1318,67 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         on_about_clicked,
     );
 
+    // Sidebar signals
+    (b.g_signal_connect_data)(
+        btn_sidebar,
+        clicked_sig.as_ptr(),
+        cb_sidebar,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_sidebar_add,
+        clicked_sig.as_ptr(),
+        cb_sidebar_add,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+
+    // Lens zoom signals
+    (b.g_signal_connect_data)(
+        lens_btn,
+        notify_active_sig.as_ptr(),
+        cb_lens_notify,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        lens_popover,
+        closed_sig.as_ptr(),
+        cb_lens_closed,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_lens_out,
+        clicked_sig.as_ptr(),
+        cb_zoom_out,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_lens_in,
+        clicked_sig.as_ptr(),
+        cb_zoom_in,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_lens_reset,
+        clicked_sig.as_ptr(),
+        cb_zoom_reset,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+
+    // Nav signals
     (b.g_signal_connect_data)(
         btn_back,
         clicked_sig.as_ptr(),
@@ -927,6 +1412,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
+    // 3-dots Menu signals
     (b.g_signal_connect_data)(
         btn_new_tab,
         clicked_sig.as_ptr(),
@@ -939,30 +1425,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         btn_new_incognito,
         clicked_sig.as_ptr(),
         cb_new_incognito,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-    (b.g_signal_connect_data)(
-        btn_zoom_out,
-        clicked_sig.as_ptr(),
-        cb_zoom_out,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-    (b.g_signal_connect_data)(
-        btn_zoom_in,
-        clicked_sig.as_ptr(),
-        cb_zoom_in,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-    (b.g_signal_connect_data)(
-        btn_zoom_reset,
-        clicked_sig.as_ptr(),
-        cb_zoom_reset,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
@@ -992,10 +1454,10 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Box container: HeaderBar on top, WebView below
+    // Box container: HeaderBar on top, content_box (sidebar + webview) below
     let box_vertical = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     (b.gtk_box_append)(box_vertical, header);
-    (b.gtk_box_append)(box_vertical, webview);
+    (b.gtk_box_append)(box_vertical, content_box);
 
     (b.adw_application_window_set_content)(win, box_vertical);
     (b.gtk_window_present)(win);
