@@ -15,12 +15,15 @@ finish-args:
   # Wayland and X11 access
   - --socket=fallback-x11
   - --socket=wayland
+  # IPC sharing for shared memory (Wayland/X11 SHM, WebKit IPC, Vulkan)
+  - --share=ipc
   # Audio playback
   - --socket=pulseaudio
   # Network access for web browsing
   - --share=network
-  # GPU acceleration
+  # GPU acceleration and input devices
   - --device=dri
+  - --device=input
   # Notifications
   - --talk-name=org.freedesktop.Notifications
   # File access for downloads

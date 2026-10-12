@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 type GCallback = unsafe extern "C" fn();
 
@@ -8,6 +8,7 @@ type GCallback = unsafe extern "C" fn();
 static ACTIVE_WEBVIEW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
+#[derive(Clone, Copy)]
 struct GtkBindings {
     // Adwaita
     adw_init: unsafe extern "C" fn(),
@@ -57,7 +58,7 @@ struct GtkBindings {
 unsafe impl Send for GtkBindings {}
 unsafe impl Sync for GtkBindings {}
 
-static BINDINGS: Mutex<Option<GtkBindings>> = Mutex::new(None);
+static BINDINGS: OnceLock<GtkBindings> = OnceLock::new();
 static IS_INCOGNITO: AtomicBool = AtomicBool::new(false);
 static INITIAL_URL: Mutex<Option<String>> = Mutex::new(None);
 
@@ -146,10 +147,8 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
 unsafe extern "C" fn on_back_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
     if !webview.is_null() {
-        if let Ok(guard) = BINDINGS.lock() {
-            if let Some(ref b) = *guard {
-                (b.webkit_web_view_go_back)(webview);
-            }
+        if let Some(b) = BINDINGS.get() {
+            (b.webkit_web_view_go_back)(webview);
         }
     }
 }
@@ -157,10 +156,8 @@ unsafe extern "C" fn on_back_clicked(_button: *mut c_void, _user_data: *mut c_vo
 unsafe extern "C" fn on_forward_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
     if !webview.is_null() {
-        if let Ok(guard) = BINDINGS.lock() {
-            if let Some(ref b) = *guard {
-                (b.webkit_web_view_go_forward)(webview);
-            }
+        if let Some(b) = BINDINGS.get() {
+            (b.webkit_web_view_go_forward)(webview);
         }
     }
 }
@@ -168,10 +165,8 @@ unsafe extern "C" fn on_forward_clicked(_button: *mut c_void, _user_data: *mut c
 unsafe extern "C" fn on_refresh_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
     if !webview.is_null() {
-        if let Ok(guard) = BINDINGS.lock() {
-            if let Some(ref b) = *guard {
-                (b.webkit_web_view_reload)(webview);
-            }
+        if let Some(b) = BINDINGS.get() {
+            (b.webkit_web_view_reload)(webview);
         }
     }
 }
@@ -181,40 +176,35 @@ unsafe extern "C" fn on_entry_activate(entry: *mut c_void, _user_data: *mut c_vo
     if webview.is_null() || entry.is_null() {
         return;
     }
-    if let Ok(guard) = BINDINGS.lock() {
-        if let Some(ref b) = *guard {
-            let text_ptr = (b.gtk_editable_get_text)(entry);
-            if !text_ptr.is_null() {
-                let text = CStr::from_ptr(text_ptr)
-                    .to_string_lossy()
-                    .trim()
-                    .to_string();
-                let url = if text.starts_with("http://")
-                    || text.starts_with("https://")
-                    || text.starts_with("about:")
-                    || text.starts_with("file://")
-                {
-                    text
-                } else if text.contains('.') && !text.contains(' ') {
-                    format!("https://{}", text)
-                } else {
-                    format!("https://duckduckgo.com/?q={}", text)
-                };
+    if let Some(b) = BINDINGS.get() {
+        let text_ptr = (b.gtk_editable_get_text)(entry);
+        if !text_ptr.is_null() {
+            let text = CStr::from_ptr(text_ptr)
+                .to_string_lossy()
+                .trim()
+                .to_string();
+            let url = if text.starts_with("http://")
+                || text.starts_with("https://")
+                || text.starts_with("about:")
+                || text.starts_with("file://")
+            {
+                text
+            } else if text.contains('.') && !text.contains(' ') {
+                format!("https://{}", text)
+            } else {
+                format!("https://duckduckgo.com/?q={}", text)
+            };
 
-                if let Ok(c_url) = CString::new(url) {
-                    (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
-                }
+            if let Ok(c_url) = CString::new(url) {
+                (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
             }
         }
     }
 }
 
 unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) {
-    let guard = match BINDINGS.lock() {
-        Ok(g) => g,
-        Err(_) => return,
-    };
-    let b = match guard.as_ref() {
+    println!("[Vingilot] GApplication activate signal received - initializing Adwaita window");
+    let b = match BINDINGS.get() {
         Some(bindings) => bindings,
         None => return,
     };
@@ -364,12 +354,8 @@ pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
         if let Ok(mut url_guard) = INITIAL_URL.lock() {
             *url_guard = initial_url;
         }
-        if let Ok(mut b_guard) = BINDINGS.lock() {
-            *b_guard = Some(bindings);
-        }
-
-        let guard = BINDINGS.lock().unwrap();
-        let b = guard.as_ref().unwrap();
+        let _ = BINDINGS.set(bindings);
+        let b = BINDINGS.get().unwrap();
         (b.adw_init)();
 
         let app_id = CString::new("io.github.vingilot.Vingilot").unwrap();
@@ -393,10 +379,7 @@ pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
             0,
         );
 
-        drop(guard);
-
-        let guard = BINDINGS.lock().unwrap();
-        let b = guard.as_ref().unwrap();
+        println!("[Vingilot] Starting GApplication main event loop...");
         let status = (b.g_application_run)(app, 0, std::ptr::null());
         (b.g_object_unref)(app);
 
