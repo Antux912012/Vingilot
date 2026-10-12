@@ -16,7 +16,7 @@ pub struct VingilotWindow {
 
 impl Default for VingilotWindow {
     fn default() -> Self {
-        Self::new("io.github.vingilot.Vingilot", "Vingilot")
+        Self::new("io.github.antux912012.Vingilot", "Vingilot")
     }
 }
 
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_window_initialization() {
         let win = VingilotWindow::default();
-        assert_eq!(win.app_id(), "io.github.vingilot.Vingilot");
+        assert_eq!(win.app_id(), "io.github.antux912012.Vingilot");
         assert_eq!(win.tab_manager().tabs().len(), 1);
         assert!(!win.sidebar().is_collapsed);
     }

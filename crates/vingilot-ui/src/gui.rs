@@ -1398,7 +1398,7 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
     (b.adw_about_dialog_set_application_name)(dialog, CString::new("Vingilot").unwrap().as_ptr());
     (b.adw_about_dialog_set_application_icon)(
         dialog,
-        CString::new("io.github.vingilot.Vingilot")
+        CString::new("io.github.antux912012.Vingilot")
             .unwrap()
             .as_ptr(),
     );
@@ -1983,7 +1983,7 @@ pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
             }
         }
 
-        let app_id = CString::new("io.github.vingilot.Vingilot").unwrap();
+        let app_id = CString::new("io.github.antux912012.Vingilot").unwrap();
         let app = (b.adw_application_new)(app_id.as_ptr(), 0);
         if app.is_null() {
             return false;

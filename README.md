@@ -39,14 +39,14 @@ Vingilot is packaged as an isolated, secure Flatpak bundle with Wayland, DRI/Vul
 
 ### Option 1: Install Prebuilt Flatpak Bundle
 
-Download `io.github.vingilot.Vingilot.flatpak` from the [GitHub Releases](https://github.com/Antux912012/Vingilot/releases) page and install it:
+Download `io.github.antux912012.Vingilot.flatpak` from the [GitHub Releases](https://github.com/Antux912012/Vingilot/releases) page and install it:
 
 ```bash
 # Install the Flatpak bundle
-flatpak install io.github.vingilot.Vingilot.flatpak
+flatpak install io.github.antux912012.Vingilot.flatpak
 
 # Run Vingilot
-flatpak run io.github.vingilot.Vingilot
+flatpak run io.github.antux912012.Vingilot
 ```
 
 ### Option 2: Run with Specific GPU Renderers
@@ -55,10 +55,10 @@ Vingilot supports explicit renderer selection via GTK Scene Kit:
 
 ```bash
 # Force Vulkan rendering
-flatpak run --env=GSK_RENDERER=vulkan io.github.vingilot.Vingilot
+flatpak run --env=GSK_RENDERER=vulkan io.github.antux912012.Vingilot
 
 # Force modern OpenGL (ngl) rendering
-flatpak run --env=GSK_RENDERER=ngl io.github.vingilot.Vingilot
+flatpak run --env=GSK_RENDERER=ngl io.github.antux912012.Vingilot
 ```
 
 ---
@@ -82,7 +82,7 @@ git clone https://github.com/Antux912012/Vingilot.git
 cd Vingilot
 
 # Build and install locally for the current user
-flatpak-builder --user --install --force-clean build-dir flatpak/io.github.vingilot.Vingilot.yml
+flatpak-builder --user --install --force-clean build-dir flatpak/io.github.antux912012.Vingilot.yml
 ```
 
 ### Native Cargo Development
@@ -108,7 +108,7 @@ Vingilot/
 │   ├── vingilot-cli/      # Command-line interface
 │   └── vingilot-ui/       # Libadwaita window shell, 3-dots popover, preferences, zoom
 ├── flatpak/
-│   └── io.github.vingilot.Vingilot.yml  # Flatpak packaging manifest
+│   └── io.github.antux912012.Vingilot.yml  # Flatpak packaging manifest
 ├── data/                  # Desktop file, metainfo XML, Papirus icons
 └── docs/                  # Architecture and development documentation
 ```

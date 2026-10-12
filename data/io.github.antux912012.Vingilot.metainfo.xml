@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.vingilot.Vingilot</id>
+  <id>io.github.antux912012.Vingilot</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Vingilot</name>
@@ -12,7 +12,7 @@
       Navigating Shadowy Seas private incognito browsing, and offline portable sync bundles.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.vingilot.Vingilot.desktop</launchable>
+  <launchable type="desktop-id">io.github.antux912012.Vingilot.desktop</launchable>
   <url type="homepage">https://github.com/Antux912012/Vingilot</url>
   <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
   <releases>
