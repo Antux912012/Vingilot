@@ -89,8 +89,8 @@
 
 ## Phase 13 — Userscripts
 
-- [ ] TASK-130: Userscript Parser
-- [ ] TASK-131: Userscript Injection
+- [x] TASK-130: Userscript Parser
+- [x] TASK-131: Userscript Injection
 
 ## Phase 14 — Packaging and Polish
 
