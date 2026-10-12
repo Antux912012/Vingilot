@@ -13,10 +13,14 @@ static ACTIVE_ZOOM_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut(
 static ACTIVE_LENS_BTN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_SIDEBAR_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_PANED: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_TAB_LIST_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_PINNED_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_SEPARATOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_NORMAL_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(false);
 static TAB_MANAGER: Mutex<Option<crate::tabs::TabManager>> = Mutex::new(None);
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 struct GtkBindings {
     // Adwaita
     adw_init: unsafe extern "C" fn(),
@@ -113,12 +117,30 @@ struct GtkBindings {
     gtk_entry_set_placeholder_text: unsafe extern "C" fn(*mut c_void, *const c_char),
     gtk_editable_get_text: unsafe extern "C" fn(*mut c_void) -> *const c_char,
     gtk_editable_set_text: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_image_new_from_icon_name: unsafe extern "C" fn(*const c_char) -> *mut c_void,
+    gtk_image_new_from_paintable: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    gtk_image_set_from_paintable: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_image_set_pixel_size: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_gesture_drag_new: unsafe extern "C" fn() -> *mut c_void,
+    gtk_gesture_drag_get_start_point:
+        unsafe extern "C" fn(*mut c_void, *mut libc::c_double, *mut libc::c_double) -> c_int,
+    gtk_widget_add_controller: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_widget_translate_coordinates: unsafe extern "C" fn(
+        *mut c_void,
+        *mut c_void,
+        libc::c_double,
+        libc::c_double,
+        *mut libc::c_double,
+        *mut libc::c_double,
+    ) -> c_int,
+    gtk_event_controller_get_widget: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
 
     // WebKitGTK
     webkit_web_view_new: unsafe extern "C" fn() -> *mut c_void,
     webkit_web_view_load_uri: unsafe extern "C" fn(*mut c_void, *const c_char),
     webkit_web_view_get_uri: unsafe extern "C" fn(*mut c_void) -> *const c_char,
     webkit_web_view_get_title: unsafe extern "C" fn(*mut c_void) -> *const c_char,
+    webkit_web_view_get_favicon: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
     webkit_web_view_go_back: unsafe extern "C" fn(*mut c_void),
     webkit_web_view_go_forward: unsafe extern "C" fn(*mut c_void),
     webkit_web_view_reload: unsafe extern "C" fn(*mut c_void),
@@ -296,11 +318,21 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_entry_set_placeholder_text: load_symbol(libgtk, "gtk_entry_set_placeholder_text")?,
         gtk_editable_get_text: load_symbol(libgtk, "gtk_editable_get_text")?,
         gtk_editable_set_text: load_symbol(libgtk, "gtk_editable_set_text")?,
+        gtk_image_new_from_icon_name: load_symbol(libgtk, "gtk_image_new_from_icon_name")?,
+        gtk_image_new_from_paintable: load_symbol(libgtk, "gtk_image_new_from_paintable")?,
+        gtk_image_set_from_paintable: load_symbol(libgtk, "gtk_image_set_from_paintable")?,
+        gtk_image_set_pixel_size: load_symbol(libgtk, "gtk_image_set_pixel_size")?,
+        gtk_gesture_drag_new: load_symbol(libgtk, "gtk_gesture_drag_new")?,
+        gtk_gesture_drag_get_start_point: load_symbol(libgtk, "gtk_gesture_drag_get_start_point")?,
+        gtk_widget_add_controller: load_symbol(libgtk, "gtk_widget_add_controller")?,
+        gtk_widget_translate_coordinates: load_symbol(libgtk, "gtk_widget_translate_coordinates")?,
+        gtk_event_controller_get_widget: load_symbol(libgtk, "gtk_event_controller_get_widget")?,
 
         webkit_web_view_new: load_symbol(libwebkit, "webkit_web_view_new")?,
         webkit_web_view_load_uri: load_symbol(libwebkit, "webkit_web_view_load_uri")?,
         webkit_web_view_get_uri: load_symbol(libwebkit, "webkit_web_view_get_uri")?,
         webkit_web_view_get_title: load_symbol(libwebkit, "webkit_web_view_get_title")?,
+        webkit_web_view_get_favicon: load_symbol(libwebkit, "webkit_web_view_get_favicon")?,
         webkit_web_view_go_back: load_symbol(libwebkit, "webkit_web_view_go_back")?,
         webkit_web_view_go_forward: load_symbol(libwebkit, "webkit_web_view_go_forward")?,
         webkit_web_view_reload: load_symbol(libwebkit, "webkit_web_view_reload")?,
@@ -371,32 +403,238 @@ unsafe extern "C" fn on_entry_activate(entry: *mut c_void, _user_data: *mut c_vo
     }
 }
 
+unsafe extern "C" fn on_tab_drag_end(
+    gesture: *mut c_void,
+    offset_x: libc::c_double,
+    offset_y: libc::c_double,
+    user_data: *mut c_void,
+) {
+    let idx = user_data as usize;
+    let dist_sq = offset_x * offset_x + offset_y * offset_y;
+    if dist_sq < 144.0 {
+        return;
+    }
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let sep = ACTIVE_SEPARATOR.load(Ordering::SeqCst);
+    let widget = (b.gtk_event_controller_get_widget)(gesture);
+    if widget.is_null() {
+        return;
+    }
+
+    let mut start_x = 0.0;
+    let mut start_y = 0.0;
+    (b.gtk_gesture_drag_get_start_point)(gesture, &mut start_x, &mut start_y);
+    let drop_x = start_x + offset_x;
+    let drop_y = start_y + offset_y;
+
+    let mut is_above_sep = None;
+
+    if !sep.is_null() {
+        let mut sep_rel_x = 0.0;
+        let mut sep_rel_y = 0.0;
+        let ok = (b.gtk_widget_translate_coordinates)(
+            widget,
+            sep,
+            drop_x,
+            drop_y,
+            &mut sep_rel_x,
+            &mut sep_rel_y,
+        );
+        if ok != 0 {
+            is_above_sep = Some(sep_rel_y < 0.0);
+        }
+    }
+
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        if let Some(mgr) = mgr_guard.as_mut() {
+            let was_pinned = mgr.tabs().get(idx).map(|t| t.is_pinned).unwrap_or(false);
+            if let Some(above) = is_above_sep {
+                if above != was_pinned {
+                    mgr.set_pinned(idx, above);
+                } else if offset_y < -24.0 && idx > 0 {
+                    mgr.reorder_tab(idx, idx - 1);
+                } else if offset_y > 24.0 && idx + 1 < mgr.tabs().len() {
+                    mgr.reorder_tab(idx, idx + 1);
+                }
+            } else {
+                if offset_y < -35.0 && !was_pinned {
+                    mgr.set_pinned(idx, true);
+                } else if offset_y > 35.0 && was_pinned {
+                    mgr.set_pinned(idx, false);
+                } else if offset_y < -24.0 && idx > 0 {
+                    mgr.reorder_tab(idx, idx - 1);
+                } else if offset_y > 24.0 && idx + 1 < mgr.tabs().len() {
+                    mgr.reorder_tab(idx, idx + 1);
+                }
+            }
+        }
+    }
+
+    refresh_sidebar_tabs();
+}
+
+unsafe extern "C" fn on_tab_pin_toggle_clicked(_button: *mut c_void, user_data: *mut c_void) {
+    let idx = user_data as usize;
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        if let Some(mgr) = mgr_guard.as_mut() {
+            mgr.toggle_pin(idx);
+        }
+    }
+    refresh_sidebar_tabs();
+}
+
+unsafe extern "C" fn on_paned_position_notify(
+    paned: *mut c_void,
+    _pspec: *mut c_void,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let pos = (b.gtk_paned_get_position)(paned);
+    let currently_collapsed = SIDEBAR_COLLAPSED.load(Ordering::SeqCst);
+
+    if pos <= 75 && !currently_collapsed {
+        SIDEBAR_COLLAPSED.store(true, Ordering::SeqCst);
+        refresh_sidebar_tabs();
+    } else if pos > 75 && currently_collapsed {
+        SIDEBAR_COLLAPSED.store(false, Ordering::SeqCst);
+        refresh_sidebar_tabs();
+    }
+}
+
+unsafe extern "C" fn on_webview_favicon_notify(
+    webview: *mut c_void,
+    _pspec: *mut c_void,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let favicon = (b.webkit_web_view_get_favicon)(webview);
+    if !favicon.is_null() {
+        if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+            if let Some(mgr) = mgr_guard.as_mut() {
+                if let Some(active) = mgr.active_tab_mut() {
+                    active.favicon_ptr = favicon as usize;
+                }
+            }
+        }
+        refresh_sidebar_tabs();
+    }
+}
+
+unsafe extern "C" fn on_webview_title_notify(
+    webview: *mut c_void,
+    _pspec: *mut c_void,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let title_ptr = (b.webkit_web_view_get_title)(webview);
+    if !title_ptr.is_null() {
+        let title_str = CStr::from_ptr(title_ptr).to_string_lossy().to_string();
+        if !title_str.trim().is_empty() {
+            if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+                if let Some(mgr) = mgr_guard.as_mut() {
+                    if let Some(active) = mgr.active_tab_mut() {
+                        if !active.is_incognito {
+                            active.title = title_str;
+                        }
+                    }
+                }
+            }
+            refresh_sidebar_tabs();
+        }
+    }
+}
+
+unsafe extern "C" fn on_webview_uri_notify(
+    webview: *mut c_void,
+    _pspec: *mut c_void,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+    let uri_ptr = (b.webkit_web_view_get_uri)(webview);
+    if !uri_ptr.is_null() {
+        let uri_str = CStr::from_ptr(uri_ptr).to_string_lossy().to_string();
+        if !entry.is_null() {
+            (b.gtk_editable_set_text)(entry, uri_ptr);
+        }
+        if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+            if let Some(mgr) = mgr_guard.as_mut() {
+                if let Some(active) = mgr.active_tab_mut() {
+                    active.url = uri_str;
+                }
+            }
+        }
+    }
+}
+
 unsafe fn refresh_sidebar_tabs() {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let list_box = ACTIVE_TAB_LIST_BOX.load(Ordering::SeqCst);
-    if list_box.is_null() {
+    let pinned_box = ACTIVE_PINNED_BOX.load(Ordering::SeqCst);
+    let normal_box = ACTIVE_NORMAL_BOX.load(Ordering::SeqCst);
+    let sep = ACTIVE_SEPARATOR.load(Ordering::SeqCst);
+    if pinned_box.is_null() || normal_box.is_null() || sep.is_null() {
         return;
     }
 
-    // Clear existing children
+    // Clear pinned tabs box
     loop {
-        let child = (b.gtk_widget_get_first_child)(list_box);
+        let child = (b.gtk_widget_get_first_child)(pinned_box);
         if child.is_null() {
             break;
         }
-        (b.gtk_box_remove)(list_box, child);
+        (b.gtk_box_remove)(pinned_box, child);
     }
 
+    // Clear normal tabs box
+    loop {
+        let child = (b.gtk_widget_get_first_child)(normal_box);
+        if child.is_null() {
+            break;
+        }
+        (b.gtk_box_remove)(normal_box, child);
+    }
+
+    let is_collapsed = SIDEBAR_COLLAPSED.load(Ordering::SeqCst);
+
     let clicked_sig = CString::new("clicked").unwrap();
+    let drag_end_sig = CString::new("drag-end").unwrap();
+
     let cb_select = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
         on_tab_row_clicked,
     );
     let cb_close = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
         on_tab_close_clicked,
     );
+    let cb_pin_toggle = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_tab_pin_toggle_clicked);
+    let cb_drag_end = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, libc::c_double, libc::c_double, *mut c_void),
+        GCallback,
+    >(on_tab_drag_end);
+    let cb_sidebar_add = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_sidebar_new_tab_clicked);
 
     let tab_manager_guard = match TAB_MANAGER.lock() {
         Ok(g) => g,
@@ -408,57 +646,188 @@ unsafe fn refresh_sidebar_tabs() {
         let total = mgr.tabs().len();
 
         for (idx, tab) in mgr.tabs().iter().enumerate() {
-            let row_box = (b.gtk_box_new)(0, 4); // Horizontal box
-            (b.gtk_widget_set_hexpand)(row_box, 1);
-            (b.gtk_widget_set_margin_start)(row_box, 4);
-            (b.gtk_widget_set_margin_end)(row_box, 4);
-            (b.gtk_widget_set_margin_top)(row_box, 2);
-            (b.gtk_widget_set_margin_bottom)(row_box, 2);
+            let is_active = idx == active_idx;
 
-            let tab_icon = if tab.is_incognito { "🌊 " } else { "🌐 " };
-            let label_text = format!("{}{}", tab_icon, tab.title);
-            let c_title = CString::new(label_text).unwrap();
+            // Favicon image
+            let img = if tab.favicon_ptr != 0 {
+                (b.gtk_image_new_from_paintable)(tab.favicon_ptr as *mut c_void)
+            } else {
+                let fallback = if tab.is_incognito {
+                    "weather-clear-night-symbolic"
+                } else {
+                    "globe-symbolic"
+                };
+                let c_fallback = CString::new(fallback).unwrap();
+                (b.gtk_image_new_from_icon_name)(c_fallback.as_ptr())
+            };
+            (b.gtk_image_set_pixel_size)(img, 18);
 
-            let select_btn = (b.gtk_button_new)();
-            let lbl_tab = (b.gtk_label_new)(c_title.as_ptr());
-            (b.gtk_label_set_xalign)(lbl_tab, 0.0);
-            (b.gtk_label_set_ellipsize)(lbl_tab, 3); // PANGO_ELLIPSIZE_END
-            (b.gtk_button_set_child)(select_btn, lbl_tab);
-            (b.gtk_widget_set_hexpand)(select_btn, 1);
-            (b.gtk_button_set_has_frame)(select_btn, 0);
-
-            if idx == active_idx {
-                let active_class = CString::new("suggested-action").unwrap();
-                (b.gtk_widget_add_css_class)(select_btn, active_class.as_ptr());
-            }
-
+            // Drag gesture for moving tab with mouse across the separator or reordering
+            let drag_gesture = (b.gtk_gesture_drag_new)();
             (b.g_signal_connect_data)(
-                select_btn,
-                clicked_sig.as_ptr(),
-                cb_select,
+                drag_gesture,
+                drag_end_sig.as_ptr(),
+                cb_drag_end,
                 idx as *mut c_void,
                 std::ptr::null_mut(),
                 0,
             );
-            (b.gtk_box_append)(row_box, select_btn);
 
-            if total > 1 {
-                let close_icon = CString::new("window-close-symbolic").unwrap();
-                let close_btn = (b.gtk_button_new_from_icon_name)(close_icon.as_ptr());
-                (b.gtk_button_set_has_frame)(close_btn, 0);
+            let tip_text = if tab.is_pinned {
+                format!("📌 {}\n{}", tab.title, tab.url)
+            } else {
+                format!("{}\n{}", tab.title, tab.url)
+            };
+            let c_tip = CString::new(tip_text).unwrap();
+
+            if is_collapsed {
+                // Collapsed mode: ONLY favicon is visible
+                let tab_btn = (b.gtk_button_new)();
+                (b.gtk_button_set_has_frame)(tab_btn, 0);
+                (b.gtk_button_set_child)(tab_btn, img);
+                (b.gtk_widget_set_size_request)(tab_btn, 38, 38);
+                (b.gtk_widget_set_tooltip_text)(tab_btn, c_tip.as_ptr());
+
+                if is_active {
+                    let active_class = CString::new("suggested-action").unwrap();
+                    (b.gtk_widget_add_css_class)(tab_btn, active_class.as_ptr());
+                }
+
                 (b.g_signal_connect_data)(
-                    close_btn,
+                    tab_btn,
                     clicked_sig.as_ptr(),
-                    cb_close,
+                    cb_select,
                     idx as *mut c_void,
                     std::ptr::null_mut(),
                     0,
                 );
-                (b.gtk_box_append)(row_box, close_btn);
-            }
+                (b.gtk_widget_add_controller)(tab_btn, drag_gesture);
 
-            (b.gtk_box_append)(list_box, row_box);
+                if tab.is_pinned {
+                    (b.gtk_box_append)(pinned_box, tab_btn);
+                } else {
+                    (b.gtk_box_append)(normal_box, tab_btn);
+                }
+            } else {
+                // Expanded mode: favicon + title + action buttons
+                let row_box = (b.gtk_box_new)(0, 2);
+                (b.gtk_widget_set_hexpand)(row_box, 1);
+                (b.gtk_widget_set_margin_start)(row_box, 2);
+                (b.gtk_widget_set_margin_end)(row_box, 2);
+                (b.gtk_widget_set_margin_top)(row_box, 1);
+                (b.gtk_widget_set_margin_bottom)(row_box, 1);
+
+                let tab_btn = (b.gtk_button_new)();
+                (b.gtk_button_set_has_frame)(tab_btn, 0);
+                (b.gtk_widget_set_hexpand)(tab_btn, 1);
+
+                let inner = (b.gtk_box_new)(0, 6);
+                (b.gtk_box_append)(inner, img);
+
+                let c_title = CString::new(tab.title.clone()).unwrap();
+                let lbl_tab = (b.gtk_label_new)(c_title.as_ptr());
+                (b.gtk_label_set_xalign)(lbl_tab, 0.0);
+                (b.gtk_label_set_ellipsize)(lbl_tab, 3); // PANGO_ELLIPSIZE_END
+                (b.gtk_widget_set_hexpand)(lbl_tab, 1);
+                (b.gtk_box_append)(inner, lbl_tab);
+
+                (b.gtk_button_set_child)(tab_btn, inner);
+                (b.gtk_widget_set_tooltip_text)(tab_btn, c_tip.as_ptr());
+
+                if is_active {
+                    let active_class = CString::new("suggested-action").unwrap();
+                    (b.gtk_widget_add_css_class)(tab_btn, active_class.as_ptr());
+                }
+
+                (b.g_signal_connect_data)(
+                    tab_btn,
+                    clicked_sig.as_ptr(),
+                    cb_select,
+                    idx as *mut c_void,
+                    std::ptr::null_mut(),
+                    0,
+                );
+                (b.gtk_widget_add_controller)(tab_btn, drag_gesture);
+                (b.gtk_box_append)(row_box, tab_btn);
+
+                if tab.is_pinned {
+                    // Small unpin button (or drag below separator)
+                    let pin_icon = CString::new("view-pin-symbolic").unwrap();
+                    let btn_unpin = (b.gtk_button_new_from_icon_name)(pin_icon.as_ptr());
+                    (b.gtk_button_set_has_frame)(btn_unpin, 0);
+                    let unpin_tip = CString::new("Unpin Tab (or drag below separator)").unwrap();
+                    (b.gtk_widget_set_tooltip_text)(btn_unpin, unpin_tip.as_ptr());
+                    (b.g_signal_connect_data)(
+                        btn_unpin,
+                        clicked_sig.as_ptr(),
+                        cb_pin_toggle,
+                        idx as *mut c_void,
+                        std::ptr::null_mut(),
+                        0,
+                    );
+                    (b.gtk_box_append)(row_box, btn_unpin);
+                    (b.gtk_box_append)(pinned_box, row_box);
+                } else {
+                    // Normal tab: Close button (if > 1 tab)
+                    if total > 1 {
+                        let close_icon = CString::new("window-close-symbolic").unwrap();
+                        let btn_close = (b.gtk_button_new_from_icon_name)(close_icon.as_ptr());
+                        (b.gtk_button_set_has_frame)(btn_close, 0);
+                        let close_tip = CString::new("Close Tab").unwrap();
+                        (b.gtk_widget_set_tooltip_text)(btn_close, close_tip.as_ptr());
+                        (b.g_signal_connect_data)(
+                            btn_close,
+                            clicked_sig.as_ptr(),
+                            cb_close,
+                            idx as *mut c_void,
+                            std::ptr::null_mut(),
+                            0,
+                        );
+                        (b.gtk_box_append)(row_box, btn_close);
+                    }
+                    (b.gtk_box_append)(normal_box, row_box);
+                }
+            }
         }
+
+        // Plus button: situated under the horizontal separator (in normal_box).
+        // If no normal tabs are open, it sits right under the separator.
+        // If normal tabs are open, it sits directly below them.
+        let btn_add = (b.gtk_button_new)();
+        (b.gtk_button_set_has_frame)(btn_add, 0);
+
+        if is_collapsed {
+            let add_icon = CString::new("list-add-symbolic").unwrap();
+            let add_img = (b.gtk_image_new_from_icon_name)(add_icon.as_ptr());
+            (b.gtk_image_set_pixel_size)(add_img, 16);
+            (b.gtk_button_set_child)(btn_add, add_img);
+            (b.gtk_widget_set_size_request)(btn_add, 38, 38);
+            let add_tip = CString::new("Open New Tab").unwrap();
+            (b.gtk_widget_set_tooltip_text)(btn_add, add_tip.as_ptr());
+        } else {
+            let add_inner = (b.gtk_box_new)(0, 6);
+            let add_icon = CString::new("list-add-symbolic").unwrap();
+            let add_img = (b.gtk_image_new_from_icon_name)(add_icon.as_ptr());
+            (b.gtk_image_set_pixel_size)(add_img, 16);
+            let add_lbl = (b.gtk_label_new)(CString::new("New Tab").unwrap().as_ptr());
+            (b.gtk_label_set_xalign)(add_lbl, 0.0);
+            (b.gtk_box_append)(add_inner, add_img);
+            (b.gtk_box_append)(add_inner, add_lbl);
+            (b.gtk_button_set_child)(btn_add, add_inner);
+            (b.gtk_widget_set_hexpand)(btn_add, 1);
+            let add_tip = CString::new("Open New Tab").unwrap();
+            (b.gtk_widget_set_tooltip_text)(btn_add, add_tip.as_ptr());
+        }
+
+        (b.g_signal_connect_data)(
+            btn_add,
+            clicked_sig.as_ptr(),
+            cb_sidebar_add,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+        (b.gtk_box_append)(normal_box, btn_add);
     }
 }
 
@@ -616,24 +985,27 @@ unsafe extern "C" fn on_sidebar_new_tab_clicked(_button: *mut c_void, _user_data
 
 unsafe extern "C" fn on_toggle_sidebar_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let sidebar = ACTIVE_SIDEBAR_BOX.load(Ordering::SeqCst);
-    if sidebar.is_null() {
+    let paned = ACTIVE_PANED.load(Ordering::SeqCst);
+    if sidebar.is_null() || paned.is_null() {
         return;
     }
-    if let Some(b) = BINDINGS.get() {
-        let visible = (b.gtk_widget_get_visible)(sidebar);
-        let new_visible = if visible != 0 { 0 } else { 1 };
-        (b.gtk_widget_set_visible)(sidebar, new_visible);
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
 
-        if new_visible != 0 {
-            let paned = ACTIVE_PANED.load(Ordering::SeqCst);
-            if !paned.is_null() {
-                let pos = (b.gtk_paned_get_position)(paned);
-                if pos < 140 {
-                    (b.gtk_paned_set_position)(paned, 240);
-                }
-            }
-        }
+    let is_collapsed = !SIDEBAR_COLLAPSED.load(Ordering::SeqCst);
+    SIDEBAR_COLLAPSED.store(is_collapsed, Ordering::SeqCst);
+
+    if is_collapsed {
+        (b.gtk_paned_set_position)(paned, 48);
+        (b.gtk_widget_set_size_request)(sidebar, 48, -1);
+    } else {
+        (b.gtk_paned_set_position)(paned, 220);
+        (b.gtk_widget_set_size_request)(sidebar, 48, -1);
     }
+
+    refresh_sidebar_tabs();
 }
 
 unsafe extern "C" fn on_new_tab_clicked(_button: *mut c_void, _user_data: *mut c_void) {
@@ -1241,45 +1613,37 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Create Sidebar container (left side)
     let sidebar_box = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     ACTIVE_SIDEBAR_BOX.store(sidebar_box, Ordering::SeqCst);
-    (b.gtk_widget_set_size_request)(sidebar_box, 160, -1);
+    (b.gtk_widget_set_size_request)(sidebar_box, 48, -1);
     let sidebar_class = CString::new("sidebar").unwrap();
     (b.gtk_widget_add_css_class)(sidebar_box, sidebar_class.as_ptr());
 
-    // Sidebar header with "Tabs" and "+" button
-    let sidebar_header_box = (b.gtk_box_new)(0, 6); // Horizontal
-    (b.gtk_widget_set_margin_start)(sidebar_header_box, 8);
-    (b.gtk_widget_set_margin_end)(sidebar_header_box, 8);
-    (b.gtk_widget_set_margin_top)(sidebar_header_box, 6);
-    (b.gtk_widget_set_margin_bottom)(sidebar_header_box, 6);
+    // Sidebar scrolling container
+    let scroller = (b.gtk_scrolled_window_new)();
+    (b.gtk_widget_set_vexpand)(scroller, 1);
+    (b.gtk_scrolled_window_set_policy)(scroller, 1, 2); // H=Never, V=Automatic
 
-    let lbl_tabs_title = (b.gtk_label_new)(CString::new("Open Tabs").unwrap().as_ptr());
-    (b.gtk_widget_set_hexpand)(lbl_tabs_title, 1);
-    (b.gtk_label_set_xalign)(lbl_tabs_title, 0.0);
+    let content_box = (b.gtk_box_new)(1, 4); // Vertical
+    (b.gtk_widget_set_margin_start)(content_box, 4);
+    (b.gtk_widget_set_margin_end)(content_box, 4);
+    (b.gtk_widget_set_margin_top)(content_box, 6);
+    (b.gtk_widget_set_margin_bottom)(content_box, 6);
 
-    let add_icon = CString::new("list-add-symbolic").unwrap();
-    let btn_sidebar_add = (b.gtk_button_new_from_icon_name)(add_icon.as_ptr());
-    (b.gtk_button_set_has_frame)(btn_sidebar_add, 0);
-    let add_tip = CString::new("Open New Tab").unwrap();
-    (b.gtk_widget_set_tooltip_text)(btn_sidebar_add, add_tip.as_ptr());
+    let pinned_box = (b.gtk_box_new)(1, 2); // Vertical
+    ACTIVE_PINNED_BOX.store(pinned_box, Ordering::SeqCst);
+    (b.gtk_box_append)(content_box, pinned_box);
 
-    (b.gtk_box_append)(sidebar_header_box, lbl_tabs_title);
-    (b.gtk_box_append)(sidebar_header_box, btn_sidebar_add);
-    (b.gtk_box_append)(sidebar_box, sidebar_header_box);
+    let sep = (b.gtk_separator_new)(0); // Horizontal separator
+    ACTIVE_SEPARATOR.store(sep, Ordering::SeqCst);
+    (b.gtk_widget_set_margin_top)(sep, 4);
+    (b.gtk_widget_set_margin_bottom)(sep, 4);
+    (b.gtk_box_append)(content_box, sep);
 
-    let sidebar_sep = (b.gtk_separator_new)(0);
-    (b.gtk_box_append)(sidebar_box, sidebar_sep);
+    let normal_box = (b.gtk_box_new)(1, 2); // Vertical
+    ACTIVE_NORMAL_BOX.store(normal_box, Ordering::SeqCst);
+    (b.gtk_box_append)(content_box, normal_box);
 
-    // Tab list container inside ScrolledWindow
-    let tab_scrolled = (b.gtk_scrolled_window_new)();
-    (b.gtk_widget_set_vexpand)(tab_scrolled, 1);
-    (b.gtk_scrolled_window_set_policy)(tab_scrolled, 1, 2); // H=Never, V=Automatic
-
-    let tab_list_box = (b.gtk_box_new)(1, 2); // Vertical
-    ACTIVE_TAB_LIST_BOX.store(tab_list_box, Ordering::SeqCst);
-    (b.gtk_widget_set_margin_top)(tab_list_box, 4);
-    (b.gtk_widget_set_margin_bottom)(tab_list_box, 4);
-    (b.gtk_scrolled_window_set_child)(tab_scrolled, tab_list_box);
-    (b.gtk_box_append)(sidebar_box, tab_scrolled);
+    (b.gtk_scrolled_window_set_child)(scroller, content_box);
+    (b.gtk_box_append)(sidebar_box, scroller);
 
     // Resizable Paned container: sidebar on start, webview on end
     let paned = (b.gtk_paned_new)(0); // 0 = GTK_ORIENTATION_HORIZONTAL
@@ -1293,7 +1657,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_paned_set_shrink_start_child)(paned, 0);
     (b.gtk_paned_set_resize_end_child)(paned, 1);
     (b.gtk_paned_set_shrink_end_child)(paned, 1);
-    (b.gtk_paned_set_position)(paned, 240);
+    (b.gtk_paned_set_position)(paned, 220);
 
     // Populate initial tab in sidebar
     refresh_sidebar_tabs();
@@ -1303,14 +1667,30 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let activate_sig = CString::new("activate").unwrap();
     let closed_sig = CString::new("closed").unwrap();
     let notify_active_sig = CString::new("notify::active").unwrap();
+    let notify_pos_sig = CString::new("notify::position").unwrap();
+    let notify_fav_sig = CString::new("notify::favicon").unwrap();
+    let notify_title_sig = CString::new("notify::title").unwrap();
+    let notify_uri_sig = CString::new("notify::uri").unwrap();
 
     let cb_sidebar = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
         on_toggle_sidebar_clicked,
     );
-    let cb_sidebar_add = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
+    let cb_paned_notify = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
         GCallback,
-    >(on_sidebar_new_tab_clicked);
+    >(on_paned_position_notify);
+    let cb_fav_notify = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+        GCallback,
+    >(on_webview_favicon_notify);
+    let cb_title_notify = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+        GCallback,
+    >(on_webview_title_notify);
+    let cb_uri_notify = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+        GCallback,
+    >(on_webview_uri_notify);
     let cb_lens_closed = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
@@ -1371,9 +1751,33 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
     (b.g_signal_connect_data)(
-        btn_sidebar_add,
-        clicked_sig.as_ptr(),
-        cb_sidebar_add,
+        paned,
+        notify_pos_sig.as_ptr(),
+        cb_paned_notify,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        webview,
+        notify_fav_sig.as_ptr(),
+        cb_fav_notify,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        webview,
+        notify_title_sig.as_ptr(),
+        cb_title_notify,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        webview,
+        notify_uri_sig.as_ptr(),
+        cb_uri_notify,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,

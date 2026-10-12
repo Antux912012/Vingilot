@@ -46,7 +46,24 @@ impl SideTabSidebar {
                 url: &tab.url,
                 is_active: i == manager.active_index(),
                 is_incognito: tab.is_incognito,
+                is_pinned: tab.is_pinned,
             })
+            .collect()
+    }
+
+    /// Renders pinned tab items (above the horizontal separator).
+    pub fn render_pinned_items<'a>(&self, manager: &'a TabManager) -> Vec<SidebarTabItem<'a>> {
+        self.render_items(manager)
+            .into_iter()
+            .filter(|item| item.is_pinned)
+            .collect()
+    }
+
+    /// Renders normal tab items (below the horizontal separator).
+    pub fn render_normal_items<'a>(&self, manager: &'a TabManager) -> Vec<SidebarTabItem<'a>> {
+        self.render_items(manager)
+            .into_iter()
+            .filter(|item| !item.is_pinned)
             .collect()
     }
 }
@@ -60,6 +77,7 @@ pub struct SidebarTabItem<'a> {
     pub url: &'a str,
     pub is_active: bool,
     pub is_incognito: bool,
+    pub is_pinned: bool,
 }
 
 #[cfg(test)]
@@ -86,5 +104,14 @@ mod tests {
         assert!(!items[0].is_active);
         assert!(items[1].is_active);
         assert!(items[1].is_incognito);
+        assert!(!items[0].is_pinned);
+
+        mgr.set_pinned(0, true);
+        let pinned = sidebar.render_pinned_items(&mgr);
+        let normal = sidebar.render_normal_items(&mgr);
+        assert_eq!(pinned.len(), 1);
+        assert_eq!(normal.len(), 1);
+        assert!(pinned[0].is_pinned);
+        assert!(!normal[0].is_pinned);
     }
 }

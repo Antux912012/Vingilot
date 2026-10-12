@@ -9,6 +9,8 @@ pub struct Tab {
     pub url: String,
     pub engine: WebKitEngine,
     pub is_incognito: bool, // "Navigating Shadowy Seas"
+    pub is_pinned: bool,
+    pub favicon_ptr: usize,
 }
 
 impl Tab {
@@ -33,6 +35,8 @@ impl Tab {
             url: "about:blank".to_string(),
             engine: WebKitEngine::new(config),
             is_incognito,
+            is_pinned: false,
+            favicon_ptr: 0,
         }
     }
 
@@ -147,6 +151,47 @@ impl TabManager {
             false
         }
     }
+
+    /// Sets pinned status for the tab at `index`.
+    pub fn set_pinned(&mut self, index: usize, pinned: bool) -> bool {
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.is_pinned = pinned;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Toggles pinned status for the tab at `index`.
+    pub fn toggle_pin(&mut self, index: usize) -> bool {
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.is_pinned = !tab.is_pinned;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Reorders tab from `from_index` to `to_index`.
+    pub fn reorder_tab(&mut self, from_index: usize, to_index: usize) -> bool {
+        if from_index >= self.tabs.len() || to_index >= self.tabs.len() {
+            return false;
+        }
+        if from_index == to_index {
+            return true;
+        }
+        let active_id = self.tabs.get(self.active_index).map(|t| t.id);
+        let tab = self.tabs.remove(from_index);
+        self.tabs.insert(to_index, tab);
+
+        // Update active index
+        if let Some(act_id) = active_id {
+            if let Some(new_pos) = self.tabs.iter().position(|t| t.id == act_id) {
+                self.active_index = new_pos;
+            }
+        }
+        true
+    }
 }
 
 #[cfg(test)]
@@ -184,5 +229,20 @@ mod tests {
         assert_eq!(mgr.tabs().len(), 1);
         mgr.close_tab(0);
         assert_eq!(mgr.tabs().len(), 1);
+    }
+
+    #[test]
+    fn test_tab_pinning_and_reorder() {
+        let mut mgr = TabManager::new();
+        let _id2 = mgr.new_tab();
+        assert_eq!(mgr.tabs().len(), 2);
+
+        assert!(!mgr.tabs()[0].is_pinned);
+        assert!(mgr.set_pinned(0, true));
+        assert!(mgr.tabs()[0].is_pinned);
+
+        assert!(mgr.reorder_tab(1, 0));
+        assert!(!mgr.tabs()[0].is_pinned);
+        assert!(mgr.tabs()[1].is_pinned);
     }
 }
