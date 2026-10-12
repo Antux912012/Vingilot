@@ -14,7 +14,7 @@
 
 ## Phase 2 — Browser Engine Layer
 
-- [ ] TASK-020: Browser Engine Abstraction
+- [x] TASK-020: Browser Engine Abstraction
 - [ ] TASK-021: WebKitGTK Engine Wrapper
 
 ## Phase 3 — Basic UI Shell
