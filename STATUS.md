@@ -4,7 +4,7 @@
 
 - [x] TASK-001: Bootstrap Cargo Workspace
 - [x] TASK-002: Add Quality Gate Scripts
-- [ ] TASK-003: Create Architecture Documentation
+- [x] TASK-003: Create Architecture Documentation
 
 ## Phase 1 — Core Data Models
 
