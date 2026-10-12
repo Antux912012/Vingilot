@@ -9,3 +9,9 @@ run_data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+/vendor/
+/.cargo/config.toml
+/.flatpak-builder/
+/build-dir/
+/repo/
+*.flatpak
