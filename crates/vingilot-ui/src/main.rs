@@ -1,6 +1,8 @@
 pub mod ai_panel;
 pub mod bookmark_panel;
+pub mod export_wizard;
 pub mod history_panel;
+pub mod import_wizard;
 pub mod layout;
 pub mod profile_switcher;
 pub mod reader_view;
@@ -12,7 +14,9 @@ pub mod window;
 
 pub use ai_panel::{AiAssistantPanel, AiChatEntry};
 pub use bookmark_panel::BookmarkPanel;
+pub use export_wizard::ExportWizard;
 pub use history_panel::HistoryPanel;
+pub use import_wizard::ImportWizard;
 pub use layout::{AdaptiveLayoutManager, LayoutMode};
 pub use profile_switcher::ProfileSwitcher;
 pub use reader_view::{ReaderTheme, ReaderView};

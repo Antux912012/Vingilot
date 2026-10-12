@@ -1,9 +1,12 @@
 //! Vingilot Core library: data models, repositories, sync, and import/export logic.
 
 pub mod bookmark_manager;
+pub mod bundle;
 pub mod cirdan;
+pub mod crypto;
 pub mod db;
 pub mod error;
+pub mod merge;
 pub mod models;
 pub mod profile_manager;
 pub mod reader;
@@ -11,9 +14,12 @@ pub mod repositories;
 pub mod search_engine_manager;
 
 pub use bookmark_manager::BookmarkManager;
+pub use bundle::{BundleReader, BundleWriter, SyncBundleContent};
 pub use cirdan::*;
+pub use crypto::{decrypt_bundle_data, encrypt_bundle_data, is_bundle_encrypted};
 pub use db::Database;
 pub use error::{CoreError, CoreResult};
+pub use merge::{ImportMode, MergeManager};
 pub use models::*;
 pub use profile_manager::ProfileManager;
 pub use reader::{ExtractedArticle, ReaderExtractor};

@@ -63,14 +63,14 @@
 
 ## Phase 10 — Local Sync Bundles
 
-- [ ] TASK-100: Sync Manifest and Options
-- [ ] TASK-101: Bundle Writer
-- [ ] TASK-102: Bundle Reader
-- [ ] TASK-103: ZIP Archive Support
-- [ ] TASK-104: Encrypted Bundle Support
-- [ ] TASK-105: Export Wizard UI
-- [ ] TASK-106: Import Wizard UI
-- [ ] TASK-107: Merge and Backup Logic
+- [x] TASK-100: Sync Manifest and Options
+- [x] TASK-101: Bundle Writer
+- [x] TASK-102: Bundle Reader
+- [x] TASK-103: ZIP Archive Support
+- [x] TASK-104: Encrypted Bundle Support
+- [x] TASK-105: Export Wizard UI
+- [x] TASK-106: Import Wizard UI
+- [x] TASK-107: Merge and Backup Logic
 
 ## Phase 11 — Browser Import
 
