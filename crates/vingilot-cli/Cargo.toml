@@ -7,6 +7,9 @@ edition = "2021"
 vingilot-core = { path = "../vingilot-core" }
 vingilot-engine = { path = "../vingilot-engine" }
 vingilot-ai = { path = "../vingilot-ai" }
+clap = { version = "4.5", features = ["derive"] }
+chrono = "0.4"
+uuid = { version = "1.10", features = ["v4"] }
 
 [[bin]]
 name = "vingilot-cli"

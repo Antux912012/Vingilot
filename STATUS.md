@@ -83,9 +83,9 @@
 
 ## Phase 12 — CLI
 
-- [ ] TASK-120: CLI Skeleton
-- [ ] TASK-121: CLI Read/Text/Title/Links Commands
-- [ ] TASK-122: CLI Sync Commands
+- [x] TASK-120: CLI Skeleton
+- [x] TASK-121: CLI Read/Text/Title/Links Commands
+- [x] TASK-122: CLI Sync Commands
 
 ## Phase 13 — Userscripts
 
