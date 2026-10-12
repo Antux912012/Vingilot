@@ -112,9 +112,24 @@ impl Database {
                 FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS cirdan_credentials (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                url_or_domain TEXT NOT NULL,
+                username TEXT NOT NULL,
+                encrypted_password BLOB NOT NULL,
+                nonce BLOB NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+            );
+
             CREATE INDEX IF NOT EXISTS idx_history_profile_url ON history(profile_id, url);
             CREATE INDEX IF NOT EXISTS idx_bookmarks_parent ON bookmarks(parent_id);
             CREATE INDEX IF NOT EXISTS idx_reading_list_profile ON reading_list(profile_id);
+            CREATE INDEX IF NOT EXISTS idx_cirdan_profile_domain ON cirdan_credentials(profile_id, url_or_domain);
             "#,
         )?;
         Ok(())

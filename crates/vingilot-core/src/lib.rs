@@ -1,10 +1,12 @@
 //! Vingilot Core library: data models, repositories, sync, and import/export logic.
 
+pub mod cirdan;
 pub mod db;
 pub mod error;
 pub mod models;
 pub mod repositories;
 
+pub use cirdan::*;
 pub use db::Database;
 pub use error::{CoreError, CoreResult};
 pub use models::*;
