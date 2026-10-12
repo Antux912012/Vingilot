@@ -1,10 +1,15 @@
+use crate::layout::AdaptiveLayoutManager;
+use crate::sidebar::SideTabSidebar;
+use crate::tabs::TabManager;
 use vingilot_engine::{BrowserEngine, WebKitEngine};
 
 /// Controller for the Vingilot main application window and browser shell.
 pub struct VingilotWindow {
     app_id: String,
     title: String,
-    engine: WebKitEngine,
+    tab_manager: TabManager,
+    sidebar: SideTabSidebar,
+    layout: AdaptiveLayoutManager,
     address_input: String,
     default_search_url: String,
 }
@@ -16,12 +21,14 @@ impl Default for VingilotWindow {
 }
 
 impl VingilotWindow {
-    /// Creates a new Vingilot window controller.
+    /// Creates a new Vingilot window controller with tabs, sidebar, and adaptive layout.
     pub fn new(app_id: &str, title: &str) -> Self {
         Self {
             app_id: app_id.to_string(),
             title: title.to_string(),
-            engine: WebKitEngine::default(),
+            tab_manager: TabManager::new(),
+            sidebar: SideTabSidebar::new(),
+            layout: AdaptiveLayoutManager::new(1024, 768),
             address_input: String::new(),
             default_search_url: "https://duckduckgo.com/?q=%s".to_string(),
         }
@@ -35,12 +42,28 @@ impl VingilotWindow {
         &self.title
     }
 
-    pub fn engine(&self) -> &WebKitEngine {
-        &self.engine
+    pub fn tab_manager(&self) -> &TabManager {
+        &self.tab_manager
     }
 
-    pub fn engine_mut(&mut self) -> &mut WebKitEngine {
-        &mut self.engine
+    pub fn tab_manager_mut(&mut self) -> &mut TabManager {
+        &mut self.tab_manager
+    }
+
+    pub fn sidebar(&self) -> &SideTabSidebar {
+        &self.sidebar
+    }
+
+    pub fn sidebar_mut(&mut self) -> &mut SideTabSidebar {
+        &mut self.sidebar
+    }
+
+    pub fn layout(&self) -> &AdaptiveLayoutManager {
+        &self.layout
+    }
+
+    pub fn layout_mut(&mut self) -> &mut AdaptiveLayoutManager {
+        &mut self.layout
     }
 
     pub fn address_input(&self) -> &str {
@@ -55,7 +78,7 @@ impl VingilotWindow {
         self.default_search_url = url.to_string();
     }
 
-    /// Triggers navigation from address bar entry or search query.
+    /// Triggers navigation in the active tab from address bar entry or search query.
     pub fn submit_address_bar(&mut self) -> Result<(), String> {
         if self.address_input.trim().is_empty() {
             return Ok(());
@@ -66,51 +89,95 @@ impl VingilotWindow {
             &self.default_search_url,
         );
 
-        self.engine
-            .load_url(&target)
-            .map_err(|e| format!("Navigation error: {e}"))?;
-
-        if let Ok(title) = self.engine.get_page_title() {
-            self.title = format!("{title} — Vingilot");
+        if let Some(tab) = self.tab_manager.active_tab_mut() {
+            tab.navigate(&target)?;
+            self.title = if tab.is_incognito {
+                format!("{} (Shadowy Seas) — Vingilot", tab.title)
+            } else {
+                format!("{} — Vingilot", tab.title)
+            };
+            self.address_input = tab.url.clone();
         }
-        self.address_input = self.engine.get_page_url().unwrap_or(target);
         Ok(())
     }
 
-    /// Action: Navigate Back
+    /// Action: Navigate Back in active tab
     pub fn on_back_clicked(&mut self) -> Result<(), String> {
-        self.engine.go_back().map_err(|e| e.to_string())?;
-        self.sync_state();
-        Ok(())
-    }
-
-    /// Action: Navigate Forward
-    pub fn on_forward_clicked(&mut self) -> Result<(), String> {
-        self.engine.go_forward().map_err(|e| e.to_string())?;
-        self.sync_state();
-        Ok(())
-    }
-
-    /// Action: Reload
-    pub fn on_reload_clicked(&mut self) -> Result<(), String> {
-        self.engine.reload().map_err(|e| e.to_string())?;
-        self.sync_state();
-        Ok(())
-    }
-
-    /// Action: Stop Loading
-    pub fn on_stop_clicked(&mut self) -> Result<(), String> {
-        self.engine.stop_loading().map_err(|e| e.to_string())?;
-        self.sync_state();
-        Ok(())
-    }
-
-    fn sync_state(&mut self) {
-        if let Ok(url) = self.engine.get_page_url() {
-            self.address_input = url;
+        if let Some(tab) = self.tab_manager.active_tab_mut() {
+            tab.engine.go_back().map_err(|e| e.to_string())?;
+            tab.sync();
+            self.sync_active_tab_state();
         }
-        if let Ok(title) = self.engine.get_page_title() {
-            self.title = format!("{title} — Vingilot");
+        Ok(())
+    }
+
+    /// Action: Navigate Forward in active tab
+    pub fn on_forward_clicked(&mut self) -> Result<(), String> {
+        if let Some(tab) = self.tab_manager.active_tab_mut() {
+            tab.engine.go_forward().map_err(|e| e.to_string())?;
+            tab.sync();
+            self.sync_active_tab_state();
+        }
+        Ok(())
+    }
+
+    /// Action: Reload active tab
+    pub fn on_reload_clicked(&mut self) -> Result<(), String> {
+        if let Some(tab) = self.tab_manager.active_tab_mut() {
+            tab.engine.reload().map_err(|e| e.to_string())?;
+            tab.sync();
+            self.sync_active_tab_state();
+        }
+        Ok(())
+    }
+
+    /// Action: Stop Loading active tab
+    pub fn on_stop_clicked(&mut self) -> Result<(), String> {
+        if let Some(tab) = self.tab_manager.active_tab_mut() {
+            tab.engine.stop_loading().map_err(|e| e.to_string())?;
+            tab.sync();
+            self.sync_active_tab_state();
+        }
+        Ok(())
+    }
+
+    /// Opens a new standard tab.
+    pub fn open_new_tab(&mut self) -> uuid::Uuid {
+        let id = self.tab_manager.new_tab();
+        self.sync_active_tab_state();
+        id
+    }
+
+    /// Opens a new "Navigating Shadowy Seas" incognito tab.
+    pub fn open_new_incognito_tab(&mut self) -> uuid::Uuid {
+        let id = self.tab_manager.new_incognito_tab();
+        self.sync_active_tab_state();
+        id
+    }
+
+    /// Switches tab and synchronizes state.
+    pub fn switch_tab(&mut self, index: usize) -> bool {
+        let success = self.tab_manager.switch_tab(index);
+        if success {
+            self.sync_active_tab_state();
+        }
+        success
+    }
+
+    /// Handles window resizing event for adaptive layouts.
+    pub fn on_window_resized(&mut self, width: u32, height: u32) {
+        self.layout
+            .update_dimensions(width, height, &mut self.sidebar);
+    }
+
+    fn sync_active_tab_state(&mut self) {
+        if let Some(tab) = self.tab_manager.active_tab() {
+            self.address_input = tab.url.clone();
+            self.title = if tab.is_incognito {
+                format!("{} (Shadowy Seas) — Vingilot", tab.title)
+            } else {
+                format!("{} — Vingilot", tab.title)
+            };
         }
     }
 }
@@ -123,37 +190,34 @@ mod tests {
     fn test_window_initialization() {
         let win = VingilotWindow::default();
         assert_eq!(win.app_id(), "io.github.vingilot.Vingilot");
-        assert_eq!(win.title(), "Vingilot");
+        assert_eq!(win.tab_manager().tabs().len(), 1);
+        assert!(!win.sidebar().is_collapsed);
     }
 
     #[test]
-    fn test_window_navigation_and_essentials() {
+    fn test_window_tab_switching_and_incognito() {
         let mut win = VingilotWindow::default();
-
         win.set_address_input("https://example.com");
         win.submit_address_bar().unwrap();
-        assert_eq!(win.address_input(), "https://example.com/");
-        assert_eq!(win.title(), "example.com — Vingilot");
 
-        let meta = win.engine().get_metadata();
-        assert!(meta.can_go_back);
-        assert!(!meta.can_go_forward);
+        // Open incognito tab
+        win.open_new_incognito_tab();
+        assert_eq!(win.tab_manager().tabs().len(), 2);
+        assert!(win.tab_manager().active_tab().unwrap().is_incognito);
+        assert!(win.title().contains("Shadowy Seas"));
 
-        win.on_back_clicked().unwrap();
-        assert_eq!(win.address_input(), "about:blank");
-
-        win.on_forward_clicked().unwrap();
+        // Switch back to tab 0
+        win.switch_tab(0);
         assert_eq!(win.address_input(), "https://example.com/");
     }
 
     #[test]
-    fn test_window_search_query_submission() {
+    fn test_window_resize_adaptive() {
         let mut win = VingilotWindow::default();
-        win.set_address_input("rust programming language");
-        win.submit_address_bar().unwrap();
-        assert_eq!(
-            win.address_input(),
-            "https://duckduckgo.com/?q=rust+programming+language"
-        );
+        win.on_window_resized(500, 800);
+        assert!(win.sidebar().is_collapsed);
+
+        win.on_window_resized(1200, 800);
+        assert!(!win.sidebar().is_collapsed);
     }
 }

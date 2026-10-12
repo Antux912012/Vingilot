@@ -1,0 +1,35 @@
+app-id: io.github.vingilot.Vingilot
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: vingilot-ui
+
+finish-args:
+  # Wayland and X11 access
+  - --socket=fallback-x11
+  - --socket=wayland
+  # Audio playback
+  - --socket=pulseaudio
+  # Network access for web browsing
+  - --share=network
+  # GPU acceleration
+  - --device=dri
+  # Notifications
+  - --talk-name=org.freedesktop.Notifications
+  # File access for downloads
+  - --filesystem=xdg-download
+
+modules:
+  - name: vingilot
+    buildsystem: simple
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml
+      - cargo --offline build --release --bin vingilot-ui --bin vingilot-cli
+      - install -Dm755 target/release/vingilot-ui /app/bin/vingilot-ui
+      - install -Dm755 target/release/vingilot-cli /app/bin/vingilot-cli
+      - install -Dm644 data/io.github.vingilot.Vingilot.desktop /app/share/applications/io.github.vingilot.Vingilot.desktop
+      - install -Dm644 data/io.github.vingilot.Vingilot.metainfo.xml /app/share/metainfo/io.github.vingilot.Vingilot.metainfo.xml
+      - install -Dm644 data/icons/io.github.vingilot.Vingilot.svg /app/share/icons/hicolor/scalable/apps/io.github.vingilot.Vingilot.svg
+    sources:
+      - type: dir
+        path: .

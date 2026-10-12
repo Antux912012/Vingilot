@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Vingilot
+Comment=Native GTK4/Libadwaita Web Browser for Linux
+GenericName=Web Browser
+Exec=vingilot-ui %u
+Icon=io.github.vingilot.Vingilot
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+Actions=ShadowySeas;
+
+[Desktop Action ShadowySeas]
+Name=Navigating Shadowy Seas (Incognito)
+Exec=vingilot-ui --incognito %u

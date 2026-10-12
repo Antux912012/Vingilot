@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.vingilot.Vingilot</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Vingilot</name>
+  <summary>Native GTK4/Libadwaita web browser with AI assistance and local sync</summary>
+  <description>
+    <p>
+      Vingilot is a privacy-first, native Linux web browser designed for desktop and mobile.
+      It features WebKitGTK 6.0 rendering, Círdan local encrypted password manager,
+      Navigating Shadowy Seas private incognito browsing, and offline portable sync bundles.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.vingilot.Vingilot.desktop</launchable>
+  <url type="homepage">https://github.com/vingilot/vingilot</url>
+  <provides>
+    <binary>vingilot-ui</binary>
+    <binary>vingilot-cli</binary>
+  </provides>
+</component>

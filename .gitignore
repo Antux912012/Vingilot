@@ -5,7 +5,7 @@ Cargo.lock
 *.bak
 .DS_Store
 *.vingilot
-data/
+run_data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

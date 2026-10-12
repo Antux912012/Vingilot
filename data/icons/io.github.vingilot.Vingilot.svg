@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background Squircle -->
+  <!-- Solid flat dark blue, characteristic of Papirus dark/night themes -->
+  <rect x="8" y="8" width="112" height="112" rx="24" fill="#1c3d5a"/>
+  
+  <!-- Boat Hull (Vingilot) -->
+  <!-- Clean, flat white shape without shading -->
+  <path d="M 35 85 Q 64 100 93 85 L 80 75 L 48 75 Z" fill="#ffffff"/>
+  
+  <!-- Mast -->
+  <!-- Simple vertical element, flat light grey -->
+  <rect x="62" y="40" width="4" height="40" fill="#e0e0e0"/>
+  
+  <!-- The Silmaril (Star) -->
+  <!-- Flat gold color, no glow, simplified 5-point star for minimalism -->
+  <path d="M 64 22 L 67 31 L 77 31 L 69 37 L 72 46 L 64 40 L 56 46 L 59 37 L 51 31 L 61 31 Z" fill="#FFD700"/>
+</svg>

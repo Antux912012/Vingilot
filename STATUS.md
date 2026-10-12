@@ -26,9 +26,9 @@
 
 ## Phase 4 — Tabs and Adaptive UI
 
-- [ ] TASK-040: Tab Model
-- [ ] TASK-041: Side Tab Sidebar
-- [ ] TASK-042: Adaptive Layout and Kinetic Scrolling
+- [x] TASK-040: Tab Model
+- [x] TASK-041: Side Tab Sidebar
+- [x] TASK-042: Adaptive Layout and Kinetic Scrolling
 
 ## Phase 5 — Profiles, Bookmarks, History
 
@@ -94,6 +94,6 @@
 
 ## Phase 14 — Packaging and Polish
 
-- [ ] TASK-140: Flatpak Packaging
+- [x] TASK-140: Flatpak Packaging
 - [ ] TASK-141: Web Compatibility Test Suite
 - [ ] TASK-142: User Documentation
