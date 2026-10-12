@@ -42,3 +42,12 @@ This document records the confirmed architectural decisions for Project Vingilot
 - **Context:** Secure local credential management without cloud exposure.
 - **Decision:** Introduce a local-only password manager named "Círdan". Passwords are stored encrypted locally in SQLite, never synced online, and can only be exported/imported via user-initiated encrypted bundles protected by a master passphrase.
 
+## ADR-009: Incognito Mode "Navigating Shadowy Seas"
+- **Status:** Accepted
+- **Context:** Private browsing that leaves zero traces on the local file system.
+- **Decision:** Introduce an incognito mode branded as "Navigating Shadowy Seas". In this mode:
+  - Ephemeral in-memory database and WebKit ephemeral data context are used.
+  - History, cookies, cache, form inputs, and reading list are never committed to disk.
+  - UI indicators clearly highlight when Navigating Shadowy Seas is active.
+
+

@@ -95,5 +95,5 @@
 ## Phase 14 — Packaging and Polish
 
 - [x] TASK-140: Flatpak Packaging
-- [ ] TASK-141: Web Compatibility Test Suite
-- [ ] TASK-142: User Documentation
+- [x] TASK-141: Web Compatibility Test Suite
+- [x] TASK-142: User Documentation
