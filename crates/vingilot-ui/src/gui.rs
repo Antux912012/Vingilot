@@ -12,6 +12,7 @@ static ACTIVE_POPOVER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_ZOOM_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_LENS_BTN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_SIDEBAR_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_PANED: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_TAB_LIST_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static TAB_MANAGER: Mutex<Option<crate::tabs::TabManager>> = Mutex::new(None);
 
@@ -69,6 +70,19 @@ struct GtkBindings {
     gtk_widget_get_visible: unsafe extern "C" fn(*mut c_void) -> c_int,
     gtk_widget_get_first_child: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
     gtk_widget_add_css_class: unsafe extern "C" fn(*mut c_void, *const c_char),
+    gtk_paned_new: unsafe extern "C" fn(c_int) -> *mut c_void,
+    gtk_paned_set_start_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_paned_set_end_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_paned_set_resize_start_child: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_paned_set_shrink_start_child: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_paned_set_resize_end_child: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_paned_set_shrink_end_child: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_paned_set_position: unsafe extern "C" fn(*mut c_void, c_int),
+    gtk_paned_get_position: unsafe extern "C" fn(*mut c_void) -> c_int,
+    gtk_paned_set_wide_handle: unsafe extern "C" fn(*mut c_void, c_int),
+    gdk_display_get_default: unsafe extern "C" fn() -> *mut c_void,
+    gtk_icon_theme_get_for_display: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    gtk_icon_theme_add_search_path: unsafe extern "C" fn(*mut c_void, *const c_char),
     gtk_scrolled_window_new: unsafe extern "C" fn() -> *mut c_void,
     gtk_scrolled_window_set_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_scrolled_window_set_policy: unsafe extern "C" fn(*mut c_void, c_int, c_int),
@@ -239,6 +253,19 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_widget_get_visible: load_symbol(libgtk, "gtk_widget_get_visible")?,
         gtk_widget_get_first_child: load_symbol(libgtk, "gtk_widget_get_first_child")?,
         gtk_widget_add_css_class: load_symbol(libgtk, "gtk_widget_add_css_class")?,
+        gtk_paned_new: load_symbol(libgtk, "gtk_paned_new")?,
+        gtk_paned_set_start_child: load_symbol(libgtk, "gtk_paned_set_start_child")?,
+        gtk_paned_set_end_child: load_symbol(libgtk, "gtk_paned_set_end_child")?,
+        gtk_paned_set_resize_start_child: load_symbol(libgtk, "gtk_paned_set_resize_start_child")?,
+        gtk_paned_set_shrink_start_child: load_symbol(libgtk, "gtk_paned_set_shrink_start_child")?,
+        gtk_paned_set_resize_end_child: load_symbol(libgtk, "gtk_paned_set_resize_end_child")?,
+        gtk_paned_set_shrink_end_child: load_symbol(libgtk, "gtk_paned_set_shrink_end_child")?,
+        gtk_paned_set_position: load_symbol(libgtk, "gtk_paned_set_position")?,
+        gtk_paned_get_position: load_symbol(libgtk, "gtk_paned_get_position")?,
+        gtk_paned_set_wide_handle: load_symbol(libgtk, "gtk_paned_set_wide_handle")?,
+        gdk_display_get_default: load_symbol(libgtk, "gdk_display_get_default")?,
+        gtk_icon_theme_get_for_display: load_symbol(libgtk, "gtk_icon_theme_get_for_display")?,
+        gtk_icon_theme_add_search_path: load_symbol(libgtk, "gtk_icon_theme_add_search_path")?,
         gtk_scrolled_window_new: load_symbol(libgtk, "gtk_scrolled_window_new")?,
         gtk_scrolled_window_set_child: load_symbol(libgtk, "gtk_scrolled_window_set_child")?,
         gtk_scrolled_window_set_policy: load_symbol(libgtk, "gtk_scrolled_window_set_policy")?,
@@ -594,7 +621,18 @@ unsafe extern "C" fn on_toggle_sidebar_clicked(_button: *mut c_void, _user_data:
     }
     if let Some(b) = BINDINGS.get() {
         let visible = (b.gtk_widget_get_visible)(sidebar);
-        (b.gtk_widget_set_visible)(sidebar, if visible != 0 { 0 } else { 1 });
+        let new_visible = if visible != 0 { 0 } else { 1 };
+        (b.gtk_widget_set_visible)(sidebar, new_visible);
+
+        if new_visible != 0 {
+            let paned = ACTIVE_PANED.load(Ordering::SeqCst);
+            if !paned.is_null() {
+                let pos = (b.gtk_paned_get_position)(paned);
+                if pos < 140 {
+                    (b.gtk_paned_set_position)(paned, 240);
+                }
+            }
+        }
     }
 }
 
@@ -1027,9 +1065,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Header bar
     let header = (b.adw_header_bar_new)();
 
-    // Sidebar toggle button
-    let sidebar_icon = CString::new("view-sidebar-symbolic").unwrap();
-    let btn_sidebar = (b.gtk_button_new_from_icon_name)(sidebar_icon.as_ptr());
+    // Sidebar toggle button (3 horizontal lines hamburger menu)
+    let hamburger_icon = CString::new("vingilot-hamburger-symbolic").unwrap();
+    let btn_sidebar = (b.gtk_button_new_from_icon_name)(hamburger_icon.as_ptr());
     let sidebar_tip = CString::new("Toggle Tab Sidebar").unwrap();
     (b.gtk_widget_set_tooltip_text)(btn_sidebar, sidebar_tip.as_ptr());
     (b.adw_header_bar_pack_start)(header, btn_sidebar);
@@ -1203,7 +1241,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Create Sidebar container (left side)
     let sidebar_box = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     ACTIVE_SIDEBAR_BOX.store(sidebar_box, Ordering::SeqCst);
-    (b.gtk_widget_set_size_request)(sidebar_box, 230, -1);
+    (b.gtk_widget_set_size_request)(sidebar_box, 160, -1);
+    let sidebar_class = CString::new("sidebar").unwrap();
+    (b.gtk_widget_add_css_class)(sidebar_box, sidebar_class.as_ptr());
 
     // Sidebar header with "Tabs" and "+" button
     let sidebar_header_box = (b.gtk_box_new)(0, 6); // Horizontal
@@ -1241,16 +1281,19 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_scrolled_window_set_child)(tab_scrolled, tab_list_box);
     (b.gtk_box_append)(sidebar_box, tab_scrolled);
 
-    // Divider between sidebar and webview
-    let vsep = (b.gtk_separator_new)(1); // Vertical separator
-
-    // Content container: sidebar on left, separator, webview on right
-    let content_box = (b.gtk_box_new)(0, 0); // 0 = GTK_ORIENTATION_HORIZONTAL
-    (b.gtk_widget_set_vexpand)(content_box, 1);
-    (b.gtk_widget_set_hexpand)(content_box, 1);
-    (b.gtk_box_append)(content_box, sidebar_box);
-    (b.gtk_box_append)(content_box, vsep);
-    (b.gtk_box_append)(content_box, webview);
+    // Resizable Paned container: sidebar on start, webview on end
+    let paned = (b.gtk_paned_new)(0); // 0 = GTK_ORIENTATION_HORIZONTAL
+    ACTIVE_PANED.store(paned, Ordering::SeqCst);
+    (b.gtk_widget_set_vexpand)(paned, 1);
+    (b.gtk_widget_set_hexpand)(paned, 1);
+    (b.gtk_paned_set_wide_handle)(paned, 1);
+    (b.gtk_paned_set_start_child)(paned, sidebar_box);
+    (b.gtk_paned_set_end_child)(paned, webview);
+    (b.gtk_paned_set_resize_start_child)(paned, 0);
+    (b.gtk_paned_set_shrink_start_child)(paned, 0);
+    (b.gtk_paned_set_resize_end_child)(paned, 1);
+    (b.gtk_paned_set_shrink_end_child)(paned, 1);
+    (b.gtk_paned_set_position)(paned, 240);
 
     // Populate initial tab in sidebar
     refresh_sidebar_tabs();
@@ -1454,10 +1497,10 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Box container: HeaderBar on top, content_box (sidebar + webview) below
+    // Box container: HeaderBar on top, paned (sidebar + webview) below
     let box_vertical = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     (b.gtk_box_append)(box_vertical, header);
-    (b.gtk_box_append)(box_vertical, content_box);
+    (b.gtk_box_append)(box_vertical, paned);
 
     (b.adw_application_window_set_content)(win, box_vertical);
     (b.gtk_window_present)(win);
@@ -1488,6 +1531,18 @@ pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
         let _ = BINDINGS.set(bindings);
         let b = BINDINGS.get().unwrap();
         (b.adw_init)();
+
+        // Register custom icon search path (for symbolic icons like hamburger)
+        let display = (b.gdk_display_get_default)();
+        if !display.is_null() {
+            let icon_theme = (b.gtk_icon_theme_get_for_display)(display);
+            if !icon_theme.is_null() {
+                let local_icons_path = CString::new("data/icons").unwrap();
+                (b.gtk_icon_theme_add_search_path)(icon_theme, local_icons_path.as_ptr());
+                let app_icons_path = CString::new("/app/share/icons").unwrap();
+                (b.gtk_icon_theme_add_search_path)(icon_theme, app_icons_path.as_ptr());
+            }
+        }
 
         let app_id = CString::new("io.github.vingilot.Vingilot").unwrap();
         let app = (b.adw_application_new)(app_id.as_ptr(), 0);
