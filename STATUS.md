@@ -19,10 +19,10 @@
 
 ## Phase 3 — Basic UI Shell
 
-- [ ] TASK-030: Libadwaita Application Window
-- [ ] TASK-031: Central Address Bar
-- [ ] TASK-032: WebView Integration
-- [ ] TASK-033: Browser Essentials
+- [x] TASK-030: Libadwaita Application Window
+- [x] TASK-031: Central Address Bar
+- [x] TASK-032: WebView Integration
+- [x] TASK-033: Browser Essentials
 
 ## Phase 4 — Tabs and Adaptive UI
 
