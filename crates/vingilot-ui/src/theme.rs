@@ -278,16 +278,16 @@ pub fn base_css() -> &'static str {
     "#
 }
 
-/// Official brand color for Incognito "Shadowy Seas" window background.
+/// Official brand color for Incognito window background.
 pub const INCOGNITO_WINDOW_COLOR: &str = "#062640";
 
-/// Official brand color for Incognito "Shadowy Seas" corner icon.
+/// Official brand color for Incognito corner icon.
 pub const INCOGNITO_ICON_COLOR: &str = "#ffc95c";
 
-/// Returns CSS rules specifically for the Incognito "Shadowy Seas" private browsing mode.
+/// Returns CSS rules specifically for the Incognito private browsing mode.
 pub fn incognito_css() -> &'static str {
     r#"
-    /* Vingilot Shadowy Seas Incognito Mode */
+    /* Vingilot Incognito Mode */
     window, .background {
         background-color: #062640 !important;
         color: #e0e8f0;

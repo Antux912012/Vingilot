@@ -167,7 +167,12 @@ impl<'a> BookmarkRepository<'a> {
         Ok(count > 0)
     }
 
-    pub fn move_node(&self, id: Uuid, new_parent_id: Option<Uuid>, position: i32) -> CoreResult<bool> {
+    pub fn move_node(
+        &self,
+        id: Uuid,
+        new_parent_id: Option<Uuid>,
+        position: i32,
+    ) -> CoreResult<bool> {
         let now = Utc::now();
         let count = self.db.conn().execute(
             "UPDATE bookmarks SET parent_id = ?1, position = ?2, updated_at = ?3 WHERE id = ?4",

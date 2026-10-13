@@ -7,11 +7,14 @@ pub struct SideTabSidebar {
     pub width_pixels: u32,
 }
 
+pub const MIN_COLLAPSED_WIDTH: u32 = 62;
+pub const DEFAULT_EXPANDED_WIDTH: u32 = 220;
+
 impl Default for SideTabSidebar {
     fn default() -> Self {
         Self {
             is_collapsed: false,
-            width_pixels: 240,
+            width_pixels: DEFAULT_EXPANDED_WIDTH,
         }
     }
 }
@@ -22,15 +25,21 @@ impl SideTabSidebar {
     }
 
     pub fn toggle_collapse(&mut self) {
-        self.is_collapsed = !self.is_collapsed;
+        if self.is_collapsed {
+            self.expand();
+        } else {
+            self.collapse();
+        }
     }
 
     pub fn collapse(&mut self) {
         self.is_collapsed = true;
+        self.width_pixels = MIN_COLLAPSED_WIDTH;
     }
 
     pub fn expand(&mut self) {
         self.is_collapsed = false;
+        self.width_pixels = DEFAULT_EXPANDED_WIDTH;
     }
 
     /// Renders view models for tab list items in the sidebar.

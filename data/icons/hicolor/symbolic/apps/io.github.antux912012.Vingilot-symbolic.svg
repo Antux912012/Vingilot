@@ -1,12 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-  <!-- Monochromatic symbolic version for toolbars, menus, and compact UI -->
+  <!-- Monochromatic symbolic icon: Star and Concentric Rings -->
   <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Star at top: center (8, 4.5), points (8, 1), (8, 8), (5, 4.5), (11, 4.5) -->
-    <path d="M 8 1 Q 8 4.5 11 4.5 Q 8 4.5 8 8 Q 8 4.5 5 4.5 Q 8 4.5 8 1 Z" fill="currentColor" stroke="none"/>
-    
-    <!-- Hull outline: apex (8, 9.5), sides (13, 11), bottom corners (12, 14.5), (4, 14.5), (3, 11) -->
-    <polygon points="8,9.5 13,11 12,14.5 4,14.5 3,11" stroke-width="1.1"/>
-    <!-- Center divider / keel -->
-    <line x1="8" y1="9.5" x2="8" y2="14.5" stroke-width="1.1"/>
+    <circle cx="8" cy="8" r="6.8" stroke-width="1.1"/>
+    <circle cx="8" cy="8" r="4.9" stroke-width="1.1"/>
   </g>
+  <polygon points="8.0,2.6 8.5,7.0 10.0,6.0 9.0,7.5 13.4,8.0 9.0,8.5 10.0,10.0 8.5,9.0 8.0,13.4 7.5,9.0 6.0,10.0 7.0,8.5 2.6,8.0 7.0,7.5 6.0,6.0 7.5,7.0" fill="currentColor"/>
 </svg>

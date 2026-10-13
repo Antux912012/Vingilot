@@ -15,7 +15,7 @@ Welcome to **Project Vingilot**, the native GTK4/Libadwaita web browser designed
   ```bash
   ./scripts/run.sh
   ```
-- **Navigating Shadowy Seas (Incognito Mode):**
+- **Incognito Mode:**
   Launch Vingilot with zero local disk footprint (in-memory SQLite, ephemeral WebKit storage):
   ```bash
   ./scripts/run.sh --incognito

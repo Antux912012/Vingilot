@@ -1,10 +1,10 @@
 use std::path::Path;
 use uuid::Uuid;
+use vingilot_core::bookmark_manager::BookmarkStore;
 use vingilot_core::db::Database;
 use vingilot_core::error::CoreResult;
 use vingilot_core::models::BookmarkBreadcrumb;
 use vingilot_core::repositories::HistoryRepository;
-use vingilot_core::bookmark_manager::BookmarkStore;
 use vingilot_core::search_engine_manager::SearchEngineManager;
 
 /// Represents a card in the "Recently viewed" section.
@@ -367,7 +367,11 @@ mod tests {
             .record_visit(profile_id, "https://rust-lang.org", Some("Rust Language"))
             .unwrap();
         hist_repo
-            .record_visit(profile_id, "https://news.ycombinator.com", Some("Hacker News"))
+            .record_visit(
+                profile_id,
+                "https://news.ycombinator.com",
+                Some("Hacker News"),
+            )
             .unwrap();
 
         let mut model = StartPageModel::new();
@@ -437,7 +441,9 @@ mod tests {
         assert_eq!(model.bookmark_items.len(), 2);
 
         // Move bookmark 1 into Folder A
-        let moved = model.move_item(&db, profile_id, bm_1, Some(folder_a)).unwrap();
+        let moved = model
+            .move_item(&db, profile_id, bm_1, Some(folder_a))
+            .unwrap();
         assert!(moved);
         assert_eq!(model.bookmark_items.len(), 1); // Only Folder A at root
 
@@ -452,7 +458,9 @@ mod tests {
         assert_eq!(model.bookmark_items.len(), 2); // Folder B + Site 1
 
         // Move Site 1 into Folder B
-        let moved2 = model.move_item(&db, profile_id, bm_1, Some(folder_b)).unwrap();
+        let moved2 = model
+            .move_item(&db, profile_id, bm_1, Some(folder_b))
+            .unwrap();
         assert!(moved2);
         assert_eq!(model.bookmark_items.len(), 1); // Only Folder B inside Folder A
 
@@ -465,11 +473,15 @@ mod tests {
         assert_eq!(model.breadcrumbs.len(), 3); // Bookmarks > Folder A > Folder B
 
         // Move Folder B into Folder B (should fail cycle check)
-        let cycle_move = model.move_item(&db, profile_id, folder_b, Some(folder_b)).unwrap();
+        let cycle_move = model
+            .move_item(&db, profile_id, folder_b, Some(folder_b))
+            .unwrap();
         assert!(!cycle_move);
 
         // Move Folder A into Folder B (should fail cycle check)
-        let cycle_move2 = model.move_item(&db, profile_id, folder_a, Some(folder_b)).unwrap();
+        let cycle_move2 = model
+            .move_item(&db, profile_id, folder_a, Some(folder_b))
+            .unwrap();
         assert!(!cycle_move2);
     }
 }

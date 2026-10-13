@@ -8,14 +8,14 @@ pub struct Tab {
     pub title: String,
     pub url: String,
     pub engine: WebKitEngine,
-    pub is_incognito: bool, // "Navigating Shadowy Seas"
+    pub is_incognito: bool,
     pub is_pinned: bool,
     pub favicon_ptr: usize,
     pub is_start_page: bool,
 }
 
 impl Tab {
-    /// Creates a new tab. If `is_incognito` is true, runs in "Navigating Shadowy Seas" mode.
+    /// Creates a new tab. If `is_incognito` is true, runs in incognito mode.
     pub fn new(is_incognito: bool) -> Self {
         let config = WebKitEngineConfig {
             data_directory: None, // Ephemeral if incognito
@@ -25,7 +25,7 @@ impl Tab {
         };
 
         let title = if is_incognito {
-            "Navigating Shadowy Seas".to_string()
+            "Incognito Mode".to_string()
         } else {
             "Start Page".to_string()
         };
@@ -49,7 +49,7 @@ impl Tab {
             self.is_start_page = true;
             self.url = trimmed.to_string();
             self.title = if self.is_incognito {
-                "Navigating Shadowy Seas".to_string()
+                "Incognito Mode".to_string()
             } else {
                 "Start Page".to_string()
             };
@@ -68,7 +68,7 @@ impl Tab {
         }
         if let Ok(title) = self.engine.get_page_title() {
             if self.is_incognito {
-                self.title = format!("{title} (Shadowy Seas)");
+                self.title = format!("{title} (Incognito)");
             } else {
                 self.title = title;
             }
@@ -123,7 +123,7 @@ impl TabManager {
         id
     }
 
-    /// Opens a new "Navigating Shadowy Seas" incognito tab.
+    /// Opens a new incognito tab.
     pub fn new_incognito_tab(&mut self) -> Uuid {
         let tab = Tab::new(true);
         let id = tab.id;
@@ -228,13 +228,13 @@ mod tests {
     }
 
     #[test]
-    fn test_incognito_tab_shadowy_seas() {
+    fn test_incognito_tab() {
         let mut mgr = TabManager::new();
         let incognito_id = mgr.new_incognito_tab();
         let tab = mgr.active_tab().unwrap();
         assert_eq!(tab.id, incognito_id);
         assert!(tab.is_incognito);
-        assert_eq!(tab.title, "Navigating Shadowy Seas");
+        assert_eq!(tab.title, "Incognito Mode");
     }
 
     #[test]

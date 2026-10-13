@@ -9,8 +9,8 @@ Type=Application
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;application/xml;x-scheme-handler/http;x-scheme-handler/https;
 StartupNotify=true
-Actions=ShadowySeas;
+Actions=NewIncognitoWindow;
 
-[Desktop Action ShadowySeas]
-Name=Navigating Shadowy Seas (Incognito)
+[Desktop Action NewIncognitoWindow]
+Name=New Incognito Window
 Exec=vingilot-ui --incognito %u

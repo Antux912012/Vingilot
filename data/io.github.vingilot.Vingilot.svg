@@ -1,17 +1,82 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Background Squircle -->
-  <!-- Solid flat dark blue, characteristic of Papirus dark/night themes -->
-  <rect x="8" y="8" width="112" height="112" rx="24" fill="#1c3d5a"/>
-  
-  <!-- Boat Hull (Vingilot) -->
-  <!-- Clean, flat white shape without shading -->
-  <path d="M 35 85 Q 64 100 93 85 L 80 75 L 48 75 Z" fill="#ffffff"/>
-  
-  <!-- Mast -->
-  <!-- Simple vertical element, flat light grey -->
-  <rect x="62" y="40" width="4" height="40" fill="#e0e0e0"/>
-  
-  <!-- The Silmaril (Star) -->
-  <!-- Flat gold color, no glow, simplified 5-point star for minimalism -->
-  <path d="M 64 22 L 67 31 L 77 31 L 69 37 L 72 46 L 64 40 L 56 46 L 59 37 L 51 31 L 61 31 Z" fill="#FFD700"/>
+  <defs>
+    <!-- Background Gradient for subtle depth -->
+    <radialGradient id="teal-radial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#0c5b62"/>
+      <stop offset="100%" stop-color="#07393e"/>
+    </radialGradient>
+    <radialGradient id="star-glow" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#ffd768" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#f5ba38" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0a4c52" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .squircle-bg {
+        fill: url(#teal-radial);
+      }
+      .ring {
+        fill: none;
+        stroke: #ffffff;
+        stroke-width: 2.8;
+      }
+      .star-facet-light {
+        fill: #fbe28c;
+      }
+      .star-facet-mid {
+        fill: #eabf4e;
+      }
+      .star-facet-dark {
+        fill: #c59730;
+      }
+      .star-facet-deep {
+        fill: #a97e20;
+      }
+    </style>
+  </defs>
+
+  <!-- Background Squircle: GNOME / Papirus standard style -->
+  <rect class="squircle-bg" x="8" y="8" width="112" height="112" rx="26" ry="26"/>
+
+  <!-- Three Concentric Rings -->
+  <circle class="ring" cx="64" cy="64" r="46"/>
+  <circle class="ring" cx="64" cy="64" r="37.5"/>
+  <circle class="ring" cx="64" cy="64" r="28.5"/>
+
+  <!-- Star Central Glow -->
+  <circle cx="64" cy="64" r="26" fill="url(#star-glow)"/>
+
+  <!-- 8-Pointed Faceted Golden Compass Star / Silmaril -->
+  <g id="star-facets">
+    <!-- North Ray -->
+    <polygon class="star-facet-light" points="64,42.6 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="64,42.6 64,64 66.2,61.8"/>
+
+    <!-- South Ray -->
+    <polygon class="star-facet-dark" points="64,85.4 64,64 61.8,66.2"/>
+    <polygon class="star-facet-deep" points="64,85.4 64,64 66.2,66.2"/>
+
+    <!-- West Ray -->
+    <polygon class="star-facet-light" points="42.6,64 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="42.6,64 64,64 61.8,66.2"/>
+
+    <!-- East Ray -->
+    <polygon class="star-facet-dark" points="85.4,64 64,64 66.2,61.8"/>
+    <polygon class="star-facet-deep" points="85.4,64 64,64 66.2,66.2"/>
+
+    <!-- NE Ray -->
+    <polygon class="star-facet-light" points="68.8,59.2 64,64 66.2,61.8"/>
+    <polygon class="star-facet-mid" points="68.8,59.2 64,64 66.2,63.5"/>
+
+    <!-- NW Ray -->
+    <polygon class="star-facet-light" points="59.2,59.2 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="59.2,59.2 64,64 61.8,63.5"/>
+
+    <!-- SE Ray -->
+    <polygon class="star-facet-dark" points="68.8,68.8 64,64 66.2,66.2"/>
+    <polygon class="star-facet-deep" points="68.8,68.8 64,64 66.2,64.5"/>
+
+    <!-- SW Ray -->
+    <polygon class="star-facet-dark" points="59.2,68.8 64,64 61.8,66.2"/>
+    <polygon class="star-facet-deep" points="59.2,68.8 64,64 61.8,64.5"/>
+  </g>
 </svg>

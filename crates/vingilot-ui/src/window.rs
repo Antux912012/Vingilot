@@ -92,7 +92,7 @@ impl VingilotWindow {
         if let Some(tab) = self.tab_manager.active_tab_mut() {
             tab.navigate(&target)?;
             self.title = if tab.is_incognito {
-                format!("{} (Shadowy Seas) — Vingilot", tab.title)
+                format!("{} (Incognito) — Vingilot", tab.title)
             } else {
                 format!("{} — Vingilot", tab.title)
             };
@@ -148,7 +148,7 @@ impl VingilotWindow {
         id
     }
 
-    /// Opens a new "Navigating Shadowy Seas" incognito tab.
+    /// Opens a new incognito tab.
     pub fn open_new_incognito_tab(&mut self) -> uuid::Uuid {
         let id = self.tab_manager.new_incognito_tab();
         self.sync_active_tab_state();
@@ -174,7 +174,7 @@ impl VingilotWindow {
         if let Some(tab) = self.tab_manager.active_tab() {
             self.address_input = tab.url.clone();
             self.title = if tab.is_incognito {
-                format!("{} (Shadowy Seas) — Vingilot", tab.title)
+                format!("{} (Incognito) — Vingilot", tab.title)
             } else {
                 format!("{} — Vingilot", tab.title)
             };
@@ -204,7 +204,7 @@ mod tests {
         win.open_new_incognito_tab();
         assert_eq!(win.tab_manager().tabs().len(), 2);
         assert!(win.tab_manager().active_tab().unwrap().is_incognito);
-        assert!(win.title().contains("Shadowy Seas"));
+        assert!(win.title().contains("Incognito"));
 
         // Switch back to tab 0
         win.switch_tab(0);

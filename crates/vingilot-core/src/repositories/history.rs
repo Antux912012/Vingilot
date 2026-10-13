@@ -218,7 +218,12 @@ impl<'a> HistoryRepository<'a> {
         Ok(entries)
     }
 
-    pub fn update_preview(&self, profile_id: Uuid, url: &str, preview_path: &str) -> CoreResult<()> {
+    pub fn update_preview(
+        &self,
+        profile_id: Uuid,
+        url: &str,
+        preview_path: &str,
+    ) -> CoreResult<()> {
         let now_ts = Utc::now().timestamp();
         self.db.conn().execute(
             r#"

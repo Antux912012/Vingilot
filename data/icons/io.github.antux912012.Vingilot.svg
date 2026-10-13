@@ -1,56 +1,82 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
-    <!-- Adaptive CSS variables fallback to #062640 / palette colors -->
+    <!-- Background Gradient for subtle depth -->
+    <radialGradient id="teal-radial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="#0c5b62"/>
+      <stop offset="100%" stop-color="#07393e"/>
+    </radialGradient>
+    <radialGradient id="star-glow" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#ffd768" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#f5ba38" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0a4c52" stop-opacity="0"/>
+    </radialGradient>
     <style>
       .squircle-bg {
-        fill: var(--gnome-palette-blue-5, #062640);
+        fill: url(#teal-radial);
       }
-      .star-facet-tl {
-        fill: #e9c96d;
-      }
-      .star-facet-bl {
-        fill: #efd980;
-      }
-      .star-facet-tr {
-        fill: #c99b3d;
-      }
-      .star-facet-br {
-        fill: #c5993c;
-      }
-      .hull-line {
-        stroke: #ffffff;
-        stroke-width: 4;
-        stroke-linejoin: round;
-        stroke-linecap: round;
+      .ring {
         fill: none;
+        stroke: #ffffff;
+        stroke-width: 2.8;
+      }
+      .star-facet-light {
+        fill: #fbe28c;
+      }
+      .star-facet-mid {
+        fill: #eabf4e;
+      }
+      .star-facet-dark {
+        fill: #c59730;
+      }
+      .star-facet-deep {
+        fill: #a97e20;
       }
     </style>
   </defs>
 
   <!-- Background Squircle: GNOME / Papirus standard style -->
-  <rect class="squircle-bg" x="8" y="8" width="112" height="112" rx="28" ry="28"/>
+  <rect class="squircle-bg" x="8" y="8" width="112" height="112" rx="26" ry="26"/>
 
-  <!-- The Silmaril (Four-pointed 3D Star) -->
-  <!-- Center: (64, 46.5) | Top: (64, 26) | Bottom: (64, 67) | Left: (44, 46.5) | Right: (84, 46.5) | Inner diagonal radius: 3.2 -->
-  <g id="silmaril-star">
-    <!-- Top-Left Facet -->
-    <polygon class="star-facet-tl" points="64,26 64,46.5 61.7,44.2"/>
-    <polygon class="star-facet-tl" points="44,46.5 64,46.5 61.7,44.2"/>
-    <!-- Bottom-Left Facet -->
-    <polygon class="star-facet-bl" points="44,46.5 64,46.5 61.7,48.8"/>
-    <polygon class="star-facet-bl" points="64,67 64,46.5 61.7,48.8"/>
-    <!-- Top-Right Facet -->
-    <polygon class="star-facet-tr" points="64,26 64,46.5 66.3,44.2"/>
-    <polygon class="star-facet-tr" points="84,46.5 64,46.5 66.3,44.2"/>
-    <!-- Bottom-Right Facet -->
-    <polygon class="star-facet-br" points="84,46.5 64,46.5 66.3,48.8"/>
-    <polygon class="star-facet-br" points="64,67 64,46.5 66.3,48.8"/>
-  </g>
+  <!-- Three Concentric Rings -->
+  <circle class="ring" cx="64" cy="64" r="46"/>
+  <circle class="ring" cx="64" cy="64" r="37.5"/>
+  <circle class="ring" cx="64" cy="64" r="28.5"/>
 
-  <!-- Boat Hull (Vingilot) -->
-  <!-- Outer Pentagon Hull with Center Vertical Keel/Mast -->
-  <g id="boat-hull">
-    <polygon class="hull-line" points="64,76 100,89 93,109 35,109 28,89"/>
-    <line class="hull-line" x1="64" y1="76" x2="64" y2="109"/>
+  <!-- Star Central Glow -->
+  <circle cx="64" cy="64" r="26" fill="url(#star-glow)"/>
+
+  <!-- 8-Pointed Faceted Golden Compass Star / Silmaril -->
+  <g id="star-facets">
+    <!-- North Ray -->
+    <polygon class="star-facet-light" points="64,42.6 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="64,42.6 64,64 66.2,61.8"/>
+
+    <!-- South Ray -->
+    <polygon class="star-facet-dark" points="64,85.4 64,64 61.8,66.2"/>
+    <polygon class="star-facet-deep" points="64,85.4 64,64 66.2,66.2"/>
+
+    <!-- West Ray -->
+    <polygon class="star-facet-light" points="42.6,64 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="42.6,64 64,64 61.8,66.2"/>
+
+    <!-- East Ray -->
+    <polygon class="star-facet-dark" points="85.4,64 64,64 66.2,61.8"/>
+    <polygon class="star-facet-deep" points="85.4,64 64,64 66.2,66.2"/>
+
+    <!-- NE Ray -->
+    <polygon class="star-facet-light" points="68.8,59.2 64,64 66.2,61.8"/>
+    <polygon class="star-facet-mid" points="68.8,59.2 64,64 66.2,63.5"/>
+
+    <!-- NW Ray -->
+    <polygon class="star-facet-light" points="59.2,59.2 64,64 61.8,61.8"/>
+    <polygon class="star-facet-mid" points="59.2,59.2 64,64 61.8,63.5"/>
+
+    <!-- SE Ray -->
+    <polygon class="star-facet-dark" points="68.8,68.8 64,64 66.2,66.2"/>
+    <polygon class="star-facet-deep" points="68.8,68.8 64,64 66.2,64.5"/>
+
+    <!-- SW Ray -->
+    <polygon class="star-facet-dark" points="59.2,68.8 64,64 61.8,66.2"/>
+    <polygon class="star-facet-deep" points="59.2,68.8 64,64 61.8,64.5"/>
   </g>
 </svg>

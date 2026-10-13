@@ -2,12 +2,12 @@ use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use vingilot_core::db::Database;
-use vingilot_core::repositories::HistoryRepository;
-use vingilot_core::bookmark_manager::BookmarkStore;
-use vingilot_core::search_engine_manager::SearchEngineManager;
-use vingilot_core::previews::{default_data_dir, default_previews_dir, default_db_path};
 use crate::start_page::StartPageModel;
+use vingilot_core::bookmark_manager::BookmarkStore;
+use vingilot_core::db::Database;
+use vingilot_core::previews::{default_data_dir, default_db_path, default_previews_dir};
+use vingilot_core::repositories::HistoryRepository;
+use vingilot_core::search_engine_manager::SearchEngineManager;
 
 type GCallback = unsafe extern "C" fn();
 
@@ -29,6 +29,7 @@ static ACTIVE_AI_MODEL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_
 static ACTIVE_AI_API_KEY_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_AI_STATUS_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(false);
+const MIN_COLLAPSED_SIDEBAR_WIDTH: i32 = 62;
 static TAB_MANAGER: Mutex<Option<crate::tabs::TabManager>> = Mutex::new(None);
 
 // Start Page and Database statics
@@ -420,8 +421,14 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_flow_box_new: load_symbol(libgtk, "gtk_flow_box_new")?,
         gtk_flow_box_append: load_symbol(libgtk, "gtk_flow_box_append")?,
         gtk_flow_box_remove: load_symbol(libgtk, "gtk_flow_box_remove")?,
-        gtk_flow_box_set_min_children_per_line: load_symbol(libgtk, "gtk_flow_box_set_min_children_per_line")?,
-        gtk_flow_box_set_max_children_per_line: load_symbol(libgtk, "gtk_flow_box_set_max_children_per_line")?,
+        gtk_flow_box_set_min_children_per_line: load_symbol(
+            libgtk,
+            "gtk_flow_box_set_min_children_per_line",
+        )?,
+        gtk_flow_box_set_max_children_per_line: load_symbol(
+            libgtk,
+            "gtk_flow_box_set_max_children_per_line",
+        )?,
         gtk_flow_box_set_selection_mode: load_symbol(libgtk, "gtk_flow_box_set_selection_mode")?,
         gtk_flow_box_set_column_spacing: load_symbol(libgtk, "gtk_flow_box_set_column_spacing")?,
         gtk_flow_box_set_row_spacing: load_symbol(libgtk, "gtk_flow_box_set_row_spacing")?,
@@ -453,7 +460,10 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         webkit_web_view_reload: load_symbol(libwebkit, "webkit_web_view_reload")?,
         webkit_web_view_get_zoom_level: load_symbol(libwebkit, "webkit_web_view_get_zoom_level")?,
         webkit_web_view_set_zoom_level: load_symbol(libwebkit, "webkit_web_view_set_zoom_level")?,
-        webkit_web_view_evaluate_javascript: load_symbol(libwebkit, "webkit_web_view_evaluate_javascript")?,
+        webkit_web_view_evaluate_javascript: load_symbol(
+            libwebkit,
+            "webkit_web_view_evaluate_javascript",
+        )?,
 
         g_signal_connect_data: load_symbol(libgobj, "g_signal_connect_data")?,
         g_application_run: load_symbol(libgio, "g_application_run")?,
@@ -506,9 +516,9 @@ unsafe extern "C" fn on_entry_activate(entry: *mut c_void, _user_data: *mut c_vo
             let target_url = {
                 let model_guard = START_PAGE_MODEL.lock().ok();
                 if let Some(Some(model)) = model_guard.as_deref() {
-                    model.resolve_search_input(&text).unwrap_or_else(|| {
-                        format!("https://duckduckgo.com/?q={}", text)
-                    })
+                    model
+                        .resolve_search_input(&text)
+                        .unwrap_or_else(|| format!("https://duckduckgo.com/?q={}", text))
                 } else if text.starts_with("http://")
                     || text.starts_with("https://")
                     || text.starts_with("about:")
@@ -620,6 +630,9 @@ unsafe extern "C" fn on_paned_position_notify(
         None => return,
     };
     let pos = (b.gtk_paned_get_position)(paned);
+    if pos < MIN_COLLAPSED_SIDEBAR_WIDTH {
+        (b.gtk_paned_set_position)(paned, MIN_COLLAPSED_SIDEBAR_WIDTH);
+    }
     let currently_collapsed = SIDEBAR_COLLAPSED.load(Ordering::SeqCst);
 
     if pos <= 75 && !currently_collapsed {
@@ -752,21 +765,33 @@ unsafe extern "C" fn on_star_clicked(_button: *mut c_void, _user_data: *mut c_vo
         }
         let title_ptr = (b.webkit_web_view_get_title)(webview);
         if !title_ptr.is_null() {
-            title_to_bookmark = CStr::from_ptr(title_ptr).to_string_lossy().trim().to_string();
+            title_to_bookmark = CStr::from_ptr(title_ptr)
+                .to_string_lossy()
+                .trim()
+                .to_string();
         }
     }
 
-    if url_to_bookmark.is_empty() || url_to_bookmark == "about:blank" || url_to_bookmark == "browser://start" {
+    if url_to_bookmark.is_empty()
+        || url_to_bookmark == "about:blank"
+        || url_to_bookmark == "browser://start"
+    {
         let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
         if !entry.is_null() {
             let text_ptr = (b.gtk_editable_get_text)(entry);
             if !text_ptr.is_null() {
-                url_to_bookmark = CStr::from_ptr(text_ptr).to_string_lossy().trim().to_string();
+                url_to_bookmark = CStr::from_ptr(text_ptr)
+                    .to_string_lossy()
+                    .trim()
+                    .to_string();
             }
         }
     }
 
-    if url_to_bookmark.is_empty() || url_to_bookmark == "about:blank" || url_to_bookmark == "browser://start" {
+    if url_to_bookmark.is_empty()
+        || url_to_bookmark == "about:blank"
+        || url_to_bookmark == "browser://start"
+    {
         return;
     }
 
@@ -790,10 +815,14 @@ unsafe extern "C" fn on_star_clicked(_button: *mut c_void, _user_data: *mut c_vo
 
     let star_btn = ACTIVE_STAR_BTN.load(Ordering::SeqCst);
     if !star_btn.is_null() {
-        let star_icon = (b.gtk_image_new_from_icon_name)(CString::new("starred-symbolic").unwrap().as_ptr());
+        let star_icon =
+            (b.gtk_image_new_from_icon_name)(CString::new("starred-symbolic").unwrap().as_ptr());
         (b.gtk_image_set_pixel_size)(star_icon, 18);
         (b.gtk_button_set_child)(star_btn, star_icon);
-        (b.gtk_widget_set_tooltip_text)(star_btn, CString::new("✓ Added to Bookmarks!").unwrap().as_ptr());
+        (b.gtk_widget_set_tooltip_text)(
+            star_btn,
+            CString::new("✓ Added to Bookmarks!").unwrap().as_ptr(),
+        );
     }
 
     queue_refresh_start_page();
@@ -1204,7 +1233,7 @@ unsafe extern "C" fn on_tab_row_clicked(_button: *mut c_void, user_data: *mut c_
                             };
 
                             active.title = if active.is_incognito {
-                                "Navigating Shadowy Seas".to_string()
+                                "Incognito Mode".to_string()
                             } else if let Some(t) = page_title {
                                 t
                             } else if cur_uri.is_empty() || cur_uri == "about:blank" {
@@ -1219,7 +1248,9 @@ unsafe extern "C" fn on_tab_row_clicked(_button: *mut c_void, user_data: *mut c_
 
             if mgr.switch_tab(idx) {
                 if let Some(tab) = mgr.active_tab() {
-                    is_start = tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
+                    is_start = tab.is_start_page
+                        || tab.url == "about:blank"
+                        || tab.url == "browser://start";
                     url_to_load = Some(tab.url.clone());
                 }
             }
@@ -1260,7 +1291,8 @@ unsafe extern "C" fn on_tab_close_clicked(_button: *mut c_void, user_data: *mut 
         if let Some(mgr) = mgr_guard.as_mut() {
             mgr.close_tab(idx);
             if let Some(tab) = mgr.active_tab() {
-                is_start = tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
+                is_start =
+                    tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
                 url_to_load = Some(tab.url.clone());
             }
         }
@@ -1316,11 +1348,11 @@ unsafe extern "C" fn on_toggle_sidebar_clicked(_button: *mut c_void, _user_data:
     SIDEBAR_COLLAPSED.store(is_collapsed, Ordering::SeqCst);
 
     if is_collapsed {
-        (b.gtk_paned_set_position)(paned, 48);
-        (b.gtk_widget_set_size_request)(sidebar, 48, -1);
+        (b.gtk_paned_set_position)(paned, MIN_COLLAPSED_SIDEBAR_WIDTH);
+        (b.gtk_widget_set_size_request)(sidebar, MIN_COLLAPSED_SIDEBAR_WIDTH, -1);
     } else {
         (b.gtk_paned_set_position)(paned, 220);
-        (b.gtk_widget_set_size_request)(sidebar, 48, -1);
+        (b.gtk_widget_set_size_request)(sidebar, MIN_COLLAPSED_SIDEBAR_WIDTH, -1);
     }
 
     refresh_sidebar_tabs();
@@ -1632,21 +1664,19 @@ unsafe extern "C" fn on_preferences_clicked(_button: *mut c_void, _user_data: *m
     (b.adw_switch_row_set_active)(row_trackers, 1);
     (b.adw_preferences_group_add)(grp_priv, row_trackers);
 
-    let row_shadowy = (b.adw_switch_row_new)();
+    let row_incog_iso = (b.adw_switch_row_new)();
     (b.adw_preferences_row_set_title)(
-        row_shadowy,
-        CString::new("Shadowy Seas Incognito Isolation")
-            .unwrap()
-            .as_ptr(),
+        row_incog_iso,
+        CString::new("Strict Incognito Isolation").unwrap().as_ptr(),
     );
     (b.adw_action_row_set_subtitle)(
-        row_shadowy,
+        row_incog_iso,
         CString::new("Zero cache and ephemeral memory storage in private sessions")
             .unwrap()
             .as_ptr(),
     );
-    (b.adw_switch_row_set_active)(row_shadowy, 1);
-    (b.adw_preferences_group_add)(grp_priv, row_shadowy);
+    (b.adw_switch_row_set_active)(row_incog_iso, 1);
+    (b.adw_preferences_group_add)(grp_priv, row_incog_iso);
 
     (b.adw_preferences_page_add)(page_priv, grp_priv);
 
@@ -1746,7 +1776,11 @@ unsafe extern "C" fn on_toggle_right_menu_clicked(_button: *mut c_void, _user_da
             (b.gtk_widget_set_visible)(side_menu, new_vis);
             if new_vis == 1 && !right_paned.is_null() && !win.is_null() {
                 let win_w = (b.gtk_widget_get_width)(win);
-                let target_pos = if win_w > 600 { win_w - 380 } else { (win_w * 2) / 3 };
+                let target_pos = if win_w > 600 {
+                    win_w - 380
+                } else {
+                    (win_w * 2) / 3
+                };
                 (b.gtk_paned_set_position)(right_paned, target_pos);
             }
         }
@@ -1793,7 +1827,10 @@ unsafe extern "C" fn on_save_ai_settings_clicked(_button: *mut c_void, _user_dat
         String::new()
     };
 
-    println!("[Vingilot] AI configuration saved: endpoint='{}', model='{}'", base_url, model);
+    println!(
+        "[Vingilot] AI configuration saved: endpoint='{}', model='{}'",
+        base_url, model
+    );
 
     if !status_lbl.is_null() {
         let status_msg = CString::new("✓ AI Configuration Saved & Active!").unwrap();
@@ -1913,7 +1950,9 @@ unsafe fn init_browser_storage(is_incognito: bool) {
     if is_incognito {
         let db = Database::in_memory().expect("In-memory SQLite database initialization failed");
         let pm = vingilot_core::profile_manager::ProfileManager::new(&db, "/tmp");
-        let profiles = pm.initialize_default_profiles().expect("Default profile creation failed");
+        let profiles = pm
+            .initialize_default_profiles()
+            .expect("Default profile creation failed");
         let profile_id = profiles[0].id;
         let sm = SearchEngineManager::new(&db);
         let _ = sm.initialize_defaults();
@@ -1940,7 +1979,9 @@ unsafe fn init_browser_storage(is_incognito: bool) {
 
     let db = Database::open(&db_path).expect("Persistent SQLite database initialization failed");
     let pm = vingilot_core::profile_manager::ProfileManager::new(&db, &data_dir);
-    let profiles = pm.initialize_default_profiles().expect("Default profile creation failed");
+    let profiles = pm
+        .initialize_default_profiles()
+        .expect("Default profile creation failed");
     let profile_id = profiles[0].id;
 
     let sm = SearchEngineManager::new(&db);
@@ -1950,8 +1991,16 @@ unsafe fn init_browser_storage(is_incognito: bool) {
     if let Ok(root_items) = bm_store.get_root_items() {
         if root_items.is_empty() {
             if let Ok(folder) = bm_store.create_folder("Daily Favorites", None) {
-                let _ = bm_store.create_bookmark("Rust Language", "https://www.rust-lang.org", Some(folder.id));
-                let _ = bm_store.create_bookmark("GNOME / Libadwaita", "https://gnome.pages.gitlab.gnome.org/libadwaita/doc/", Some(folder.id));
+                let _ = bm_store.create_bookmark(
+                    "Rust Language",
+                    "https://www.rust-lang.org",
+                    Some(folder.id),
+                );
+                let _ = bm_store.create_bookmark(
+                    "GNOME / Libadwaita",
+                    "https://gnome.pages.gitlab.gnome.org/libadwaita/doc/",
+                    Some(folder.id),
+                );
             }
             let _ = bm_store.create_bookmark("DuckDuckGo", "https://duckduckgo.com", None);
             let _ = bm_store.create_bookmark("GitHub", "https://github.com", None);
@@ -2063,7 +2112,10 @@ unsafe fn refresh_start_page() {
             for (idx, item) in recent_items.iter().enumerate() {
                 let card_btn = (b.gtk_button_new)();
                 (b.gtk_button_set_has_frame)(card_btn, 0);
-                (b.gtk_widget_add_css_class)(card_btn, CString::new("recent-card").unwrap().as_ptr());
+                (b.gtk_widget_add_css_class)(
+                    card_btn,
+                    CString::new("recent-card").unwrap().as_ptr(),
+                );
                 (b.gtk_widget_set_size_request)(card_btn, 175, 120);
 
                 let card_box = (b.gtk_box_new)(1, 4); // Vertical
@@ -2077,10 +2129,14 @@ unsafe fn refresh_start_page() {
                         if let Ok(c_path) = CString::new(ppath.clone()) {
                             (b.gtk_picture_new_for_filename)(c_path.as_ptr())
                         } else {
-                            (b.gtk_image_new_from_icon_name)(CString::new("globe-symbolic").unwrap().as_ptr())
+                            (b.gtk_image_new_from_icon_name)(
+                                CString::new("globe-symbolic").unwrap().as_ptr(),
+                            )
                         }
                     } else {
-                        (b.gtk_image_new_from_icon_name)(CString::new("globe-symbolic").unwrap().as_ptr())
+                        (b.gtk_image_new_from_icon_name)(
+                            CString::new("globe-symbolic").unwrap().as_ptr(),
+                        )
                     }
                 } else {
                     let fallback_img = (b.gtk_image_new_from_icon_name)(
@@ -2090,24 +2146,38 @@ unsafe fn refresh_start_page() {
                     fallback_img
                 };
                 (b.gtk_widget_set_size_request)(preview_widget, 160, 72);
-                (b.gtk_widget_add_css_class)(preview_widget, CString::new("recent-preview").unwrap().as_ptr());
+                (b.gtk_widget_add_css_class)(
+                    preview_widget,
+                    CString::new("recent-preview").unwrap().as_ptr(),
+                );
 
-                let lbl_title = (b.gtk_label_new)(CString::new(item.title.clone()).unwrap().as_ptr());
+                let lbl_title =
+                    (b.gtk_label_new)(CString::new(item.title.clone()).unwrap().as_ptr());
                 (b.gtk_label_set_xalign)(lbl_title, 0.0);
                 (b.gtk_label_set_ellipsize)(lbl_title, 3); // PANGO_ELLIPSIZE_END = 3
-                (b.gtk_widget_add_css_class)(lbl_title, CString::new("recent-card-title").unwrap().as_ptr());
+                (b.gtk_widget_add_css_class)(
+                    lbl_title,
+                    CString::new("recent-card-title").unwrap().as_ptr(),
+                );
 
-                let lbl_domain = (b.gtk_label_new)(CString::new(item.domain.clone()).unwrap().as_ptr());
+                let lbl_domain =
+                    (b.gtk_label_new)(CString::new(item.domain.clone()).unwrap().as_ptr());
                 (b.gtk_label_set_xalign)(lbl_domain, 0.0);
                 (b.gtk_label_set_ellipsize)(lbl_domain, 3);
-                (b.gtk_widget_add_css_class)(lbl_domain, CString::new("recent-card-domain").unwrap().as_ptr());
+                (b.gtk_widget_add_css_class)(
+                    lbl_domain,
+                    CString::new("recent-card-domain").unwrap().as_ptr(),
+                );
 
                 (b.gtk_box_append)(card_box, preview_widget);
                 (b.gtk_box_append)(card_box, lbl_title);
                 (b.gtk_box_append)(card_box, lbl_domain);
                 (b.gtk_button_set_child)(card_btn, card_box);
 
-                (b.gtk_widget_set_tooltip_text)(card_btn, CString::new(item.url.clone()).unwrap().as_ptr());
+                (b.gtk_widget_set_tooltip_text)(
+                    card_btn,
+                    CString::new(item.url.clone()).unwrap().as_ptr(),
+                );
 
                 (b.g_signal_connect_data)(
                     card_btn,
@@ -2146,9 +2216,13 @@ unsafe fn refresh_start_page() {
 
         let total_crumbs = breadcrumbs.len();
         for (idx, crumb) in breadcrumbs.iter().enumerate() {
-            let btn_crumb = (b.gtk_button_new_with_label)(CString::new(crumb.title.clone()).unwrap().as_ptr());
+            let btn_crumb =
+                (b.gtk_button_new_with_label)(CString::new(crumb.title.clone()).unwrap().as_ptr());
             (b.gtk_button_set_has_frame)(btn_crumb, 0);
-            (b.gtk_widget_add_css_class)(btn_crumb, CString::new("breadcrumb-btn").unwrap().as_ptr());
+            (b.gtk_widget_add_css_class)(
+                btn_crumb,
+                CString::new("breadcrumb-btn").unwrap().as_ptr(),
+            );
 
             if let Ok(mut list) = VISIBLE_BREADCRUMB_BTNS.lock() {
                 list.push((crumb.id, btn_crumb as usize));
@@ -2166,7 +2240,10 @@ unsafe fn refresh_start_page() {
 
             if idx + 1 < total_crumbs {
                 let lbl_sep = (b.gtk_label_new)(CString::new("›").unwrap().as_ptr());
-                (b.gtk_widget_add_css_class)(lbl_sep, CString::new("breadcrumb-sep").unwrap().as_ptr());
+                (b.gtk_widget_add_css_class)(
+                    lbl_sep,
+                    CString::new("breadcrumb-sep").unwrap().as_ptr(),
+                );
                 (b.gtk_box_append)(breadcrumbs_box, lbl_sep);
             }
         }
@@ -2220,20 +2297,27 @@ unsafe fn refresh_start_page() {
             } else {
                 "user-bookmarks-symbolic"
             };
-            let icon_img = (b.gtk_image_new_from_icon_name)(CString::new(icon_name).unwrap().as_ptr());
+            let icon_img =
+                (b.gtk_image_new_from_icon_name)(CString::new(icon_name).unwrap().as_ptr());
             (b.gtk_image_set_pixel_size)(icon_img, 32);
 
             let lbl_title = (b.gtk_label_new)(CString::new(item.title.clone()).unwrap().as_ptr());
             (b.gtk_label_set_xalign)(lbl_title, 0.5);
             (b.gtk_label_set_ellipsize)(lbl_title, 3);
-            (b.gtk_widget_add_css_class)(lbl_title, CString::new("bookmark-tile-title").unwrap().as_ptr());
+            (b.gtk_widget_add_css_class)(
+                lbl_title,
+                CString::new("bookmark-tile-title").unwrap().as_ptr(),
+            );
 
             (b.gtk_box_append)(tile_box, icon_img);
             (b.gtk_box_append)(tile_box, lbl_title);
             (b.gtk_button_set_child)(tile_btn, tile_box);
 
             if let Some(ref u) = item.url {
-                (b.gtk_widget_set_tooltip_text)(tile_btn, CString::new(u.clone()).unwrap().as_ptr());
+                (b.gtk_widget_set_tooltip_text)(
+                    tile_btn,
+                    CString::new(u.clone()).unwrap().as_ptr(),
+                );
             }
 
             if item.is_folder {
@@ -2308,7 +2392,10 @@ unsafe extern "C" fn on_start_page_search_activate(entry: *mut c_void, _user_dat
     if text_ptr.is_null() {
         return;
     }
-    let query = CStr::from_ptr(text_ptr).to_string_lossy().trim().to_string();
+    let query = CStr::from_ptr(text_ptr)
+        .to_string_lossy()
+        .trim()
+        .to_string();
     if query.is_empty() {
         return;
     }
@@ -2656,10 +2743,16 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     (b.gtk_scrolled_window_set_policy)(scrolled, 2, 1); // H=Never (2), V=Automatic (1)
     (b.gtk_widget_set_vexpand)(scrolled, 1);
     (b.gtk_widget_set_hexpand)(scrolled, 1);
-    (b.gtk_widget_add_css_class)(scrolled, CString::new("start-page-scrolled").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        scrolled,
+        CString::new("start-page-scrolled").unwrap().as_ptr(),
+    );
 
     let container = (b.gtk_box_new)(1, 24); // Vertical, 24px spacing
-    (b.gtk_widget_add_css_class)(container, CString::new("start-page-container").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        container,
+        CString::new("start-page-container").unwrap().as_ptr(),
+    );
     (b.gtk_widget_set_margin_start)(container, 32);
     (b.gtk_widget_set_margin_end)(container, 32);
     (b.gtk_widget_set_margin_top)(container, 40);
@@ -2675,7 +2768,10 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
 
     let search_entry = (b.gtk_entry_new)();
     ACTIVE_START_PAGE_SEARCH.store(search_entry, Ordering::SeqCst);
-    (b.gtk_widget_add_css_class)(search_entry, CString::new("start-page-search").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        search_entry,
+        CString::new("start-page-search").unwrap().as_ptr(),
+    );
     (b.gtk_widget_set_size_request)(search_entry, 520, 44);
 
     let activate_sig = CString::new("activate").unwrap();
@@ -2698,10 +2794,16 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     // Accent Palette Selector (Standard GNOME Accents)
     let palette_box = (b.gtk_box_new)(0, 6);
     (b.gtk_widget_set_halign)(palette_box, 3); // GTK_ALIGN_CENTER
-    (b.gtk_widget_add_css_class)(palette_box, CString::new("accent-palette-box").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        palette_box,
+        CString::new("accent-palette-box").unwrap().as_ptr(),
+    );
 
     let lbl_palette = (b.gtk_label_new)(CString::new("🎨 Accent:").unwrap().as_ptr());
-    (b.gtk_widget_add_css_class)(lbl_palette, CString::new("accent-palette-label").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        lbl_palette,
+        CString::new("accent-palette-label").unwrap().as_ptr(),
+    );
     (b.gtk_box_append)(palette_box, lbl_palette);
 
     let accents_classes: &[(&str, &str)] = &[
@@ -2718,10 +2820,9 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     ];
 
     let clicked_sig = CString::new("clicked").unwrap();
-    let cb_accent = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_accent_button_clicked);
+    let cb_accent = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_accent_button_clicked,
+    );
 
     for (idx, (acc_name, dot_class)) in accents_classes.iter().enumerate() {
         let dot_btn = (b.gtk_button_new)();
@@ -2731,7 +2832,9 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
         (b.gtk_widget_add_css_class)(dot_btn, CString::new(*dot_class).unwrap().as_ptr());
         (b.gtk_widget_set_tooltip_text)(
             dot_btn,
-            CString::new(format!("{} accent", acc_name)).unwrap().as_ptr(),
+            CString::new(format!("{} accent", acc_name))
+                .unwrap()
+                .as_ptr(),
         );
 
         (b.g_signal_connect_data)(
@@ -2751,12 +2854,18 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     // Section 2: Recently viewed
     let recent_box = (b.gtk_box_new)(1, 8);
     ACTIVE_RECENT_BOX.store(recent_box, Ordering::SeqCst);
-    (b.gtk_widget_add_css_class)(recent_box, CString::new("start-page-section").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        recent_box,
+        CString::new("start-page-section").unwrap().as_ptr(),
+    );
 
     let recent_header = (b.gtk_box_new)(0, 6);
     let lbl_recent = (b.gtk_label_new)(CString::new("Recently Viewed").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_recent, 0.0);
-    (b.gtk_widget_add_css_class)(lbl_recent, CString::new("section-header-title").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        lbl_recent,
+        CString::new("section-header-title").unwrap().as_ptr(),
+    );
     (b.gtk_box_append)(recent_header, lbl_recent);
     (b.gtk_box_append)(recent_box, recent_header);
 
@@ -2773,7 +2882,10 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
 
     // Section 3: Bookmarks Toolbar and FlowBox
     let bm_section = (b.gtk_box_new)(1, 8);
-    (b.gtk_widget_add_css_class)(bm_section, CString::new("start-page-section").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        bm_section,
+        CString::new("start-page-section").unwrap().as_ptr(),
+    );
 
     let bm_toolbar = (b.gtk_box_new)(0, 8); // Horizontal toolbar
     let breadcrumbs_box = (b.gtk_box_new)(0, 4);
@@ -2782,8 +2894,12 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     (b.gtk_box_append)(bm_toolbar, breadcrumbs_box);
 
     let clicked_sig = CString::new("clicked").unwrap();
-    let btn_new_folder = (b.gtk_button_new_with_label)(CString::new("📁 New Folder").unwrap().as_ptr());
-    (b.gtk_widget_add_css_class)(btn_new_folder, CString::new("toolbar-btn").unwrap().as_ptr());
+    let btn_new_folder =
+        (b.gtk_button_new_with_label)(CString::new("📁 New Folder").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        btn_new_folder,
+        CString::new("toolbar-btn").unwrap().as_ptr(),
+    );
     let cb_new_folder = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
@@ -2797,12 +2913,12 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
         0,
     );
 
-    let btn_add_bm = (b.gtk_button_new_with_label)(CString::new("★ Add Bookmark").unwrap().as_ptr());
+    let btn_add_bm =
+        (b.gtk_button_new_with_label)(CString::new("★ Add Bookmark").unwrap().as_ptr());
     (b.gtk_widget_add_css_class)(btn_add_bm, CString::new("toolbar-btn").unwrap().as_ptr());
-    let cb_add_bm = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_add_bookmark_clicked);
+    let cb_add_bm = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_add_bookmark_clicked,
+    );
     (b.g_signal_connect_data)(
         btn_add_bm,
         clicked_sig.as_ptr(),
@@ -2871,7 +2987,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let is_incognito = IS_INCOGNITO.load(Ordering::SeqCst);
 
     let title = if is_incognito {
-        CString::new("Vingilot — Navigating Shadowy Seas (Incognito)").unwrap()
+        CString::new("Vingilot — Incognito").unwrap()
     } else {
         CString::new("Vingilot").unwrap()
     };
@@ -2896,7 +3012,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
             if let Ok(c_incog) = CString::new(incog_css) {
                 (b.gtk_css_provider_load_from_string)(incog_provider, c_incog.as_ptr());
                 (b.gtk_style_context_add_provider_for_display)(
-                    display, incog_provider, 800, // GTK_STYLE_PROVIDER_PRIORITY_USER
+                    display,
+                    incog_provider,
+                    800, // GTK_STYLE_PROVIDER_PRIORITY_USER
                 );
             }
         }
@@ -2916,7 +3034,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         // Visible incognito icon on the corner left instead of the three buttons (#ffc95c)
         let btn_incognito_icon = (b.gtk_button_new)();
         let icon_img = (b.gtk_image_new_from_icon_name)(
-            CString::new("vingilot-incognito-symbolic").unwrap().as_ptr(),
+            CString::new("vingilot-incognito-symbolic")
+                .unwrap()
+                .as_ptr(),
         );
         (b.gtk_image_set_pixel_size)(icon_img, 22);
         (b.gtk_button_set_child)(btn_incognito_icon, icon_img);
@@ -2924,7 +3044,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         (b.gtk_widget_set_size_request)(btn_incognito_icon, 38, 38);
         (b.gtk_widget_set_margin_start)(btn_incognito_icon, 8);
         (b.gtk_widget_set_margin_end)(btn_incognito_icon, 6);
-        let incognito_tip = CString::new("Navigating Shadowy Seas (Incognito)").unwrap();
+        let incognito_tip = CString::new("Incognito Mode").unwrap();
         (b.gtk_widget_set_tooltip_text)(btn_incognito_icon, incognito_tip.as_ptr());
         let class_incog = CString::new("incognito-corner-icon").unwrap();
         (b.gtk_widget_add_css_class)(btn_incognito_icon, class_incog.as_ptr());
@@ -2942,7 +3062,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         // Normal mode: Left corner button with browser icon (toggles Tab Sidebar)
         let btn_sidebar = (b.gtk_button_new)();
         let icon_img = (b.gtk_image_new_from_icon_name)(
-            CString::new("io.github.antux912012.Vingilot-symbolic").unwrap().as_ptr(),
+            CString::new("io.github.antux912012.Vingilot-symbolic")
+                .unwrap()
+                .as_ptr(),
         );
         (b.gtk_image_set_pixel_size)(icon_img, 22);
         (b.gtk_button_set_child)(btn_sidebar, icon_img);
@@ -3025,10 +3147,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Initialize Browser Database & Start Page model
     init_browser_storage(is_incognito);
 
-    let initial_requested_url = INITIAL_URL
-        .lock()
-        .ok()
-        .and_then(|g| g.clone());
+    let initial_requested_url = INITIAL_URL.lock().ok().and_then(|g| g.clone());
 
     let (start_url, is_initial_start_page) = match initial_requested_url {
         Some(u) => {
@@ -3049,9 +3168,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 
     // Reader Mode Button on right side of address bar
     let reader_btn = (b.gtk_button_new)();
-    let reader_icon_img = (b.gtk_image_new_from_icon_name)(
-        CString::new("view-paged-symbolic").unwrap().as_ptr(),
-    );
+    let reader_icon_img =
+        (b.gtk_image_new_from_icon_name)(CString::new("view-paged-symbolic").unwrap().as_ptr());
     (b.gtk_button_set_child)(reader_btn, reader_icon_img);
     (b.gtk_button_set_has_frame)(reader_btn, 0);
     (b.gtk_widget_set_size_request)(reader_btn, 32, 32);
@@ -3063,9 +3181,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // Bookmark Star Button on right side of address bar
     let star_btn = (b.gtk_button_new)();
     ACTIVE_STAR_BTN.store(star_btn, Ordering::SeqCst);
-    let star_icon_img = (b.gtk_image_new_from_icon_name)(
-        CString::new("non-starred-symbolic").unwrap().as_ptr(),
-    );
+    let star_icon_img =
+        (b.gtk_image_new_from_icon_name)(CString::new("non-starred-symbolic").unwrap().as_ptr());
     (b.gtk_button_set_child)(star_btn, star_icon_img);
     (b.gtk_button_set_has_frame)(star_btn, 0);
     (b.gtk_widget_set_size_request)(star_btn, 32, 32);
@@ -3073,14 +3190,12 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_tooltip_text)(star_btn, star_tip.as_ptr());
     (b.gtk_widget_add_css_class)(star_btn, class_action_btn.as_ptr());
 
-    let cb_reader = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_reader_mode_clicked);
-    let cb_star = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_star_clicked);
+    let cb_reader = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_reader_mode_clicked,
+    );
+    let cb_star = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_star_clicked,
+    );
 
     (b.g_signal_connect_data)(
         reader_btn,
@@ -3112,7 +3227,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
             tab.url = start_url.clone();
             tab.is_start_page = is_initial_start_page;
             tab.title = if is_incognito {
-                "Navigating Shadowy Seas".to_string()
+                "Incognito Mode".to_string()
             } else if is_initial_start_page {
                 "Start Page".to_string()
             } else {
@@ -3127,17 +3242,15 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     ACTIVE_WINDOW.store(win, Ordering::SeqCst);
 
     // Home button in HeaderBar (on left side)
-    let home_btn = (b.gtk_button_new_from_icon_name)(
-        CString::new("go-home-symbolic").unwrap().as_ptr(),
-    );
+    let home_btn =
+        (b.gtk_button_new_from_icon_name)(CString::new("go-home-symbolic").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(home_btn, 0);
     (b.gtk_widget_set_size_request)(home_btn, 38, 38);
     let home_tip = CString::new("Open Start Page").unwrap();
     (b.gtk_widget_set_tooltip_text)(home_btn, home_tip.as_ptr());
-    let cb_home = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_home_clicked);
+    let cb_home = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_home_clicked,
+    );
     (b.g_signal_connect_data)(
         home_btn,
         CString::new("clicked").unwrap().as_ptr(),
@@ -3149,9 +3262,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.adw_header_bar_pack_start)(header, home_btn);
 
     // Main Menu Button on top right of HeaderBar: opens side menu on the right
-    let menu_btn = (b.gtk_button_new_from_icon_name)(
-        CString::new("open-menu-symbolic").unwrap().as_ptr(),
-    );
+    let menu_btn =
+        (b.gtk_button_new_from_icon_name)(CString::new("open-menu-symbolic").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(menu_btn, 0);
     (b.gtk_widget_set_size_request)(menu_btn, 38, 38);
     let menu_tip = CString::new("Browser Menu & Settings").unwrap();
@@ -3171,7 +3283,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     }
 
     // Build Native Start Page widget
-    let start_page = build_start_page_widget(&b);
+    let start_page = build_start_page_widget(b);
     apply_start_page_accent(&load_saved_accent());
 
     // Content Stack containing both start_page and webview
@@ -3180,20 +3292,34 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_vexpand)(content_stack, 1);
     (b.gtk_widget_set_hexpand)(content_stack, 1);
 
-    (b.gtk_stack_add_named)(content_stack, start_page, CString::new("start_page").unwrap().as_ptr());
-    (b.gtk_stack_add_named)(content_stack, webview, CString::new("webview").unwrap().as_ptr());
+    (b.gtk_stack_add_named)(
+        content_stack,
+        start_page,
+        CString::new("start_page").unwrap().as_ptr(),
+    );
+    (b.gtk_stack_add_named)(
+        content_stack,
+        webview,
+        CString::new("webview").unwrap().as_ptr(),
+    );
 
     if is_initial_start_page {
-        (b.gtk_stack_set_visible_child_name)(content_stack, CString::new("start_page").unwrap().as_ptr());
+        (b.gtk_stack_set_visible_child_name)(
+            content_stack,
+            CString::new("start_page").unwrap().as_ptr(),
+        );
         refresh_start_page();
     } else {
-        (b.gtk_stack_set_visible_child_name)(content_stack, CString::new("webview").unwrap().as_ptr());
+        (b.gtk_stack_set_visible_child_name)(
+            content_stack,
+            CString::new("webview").unwrap().as_ptr(),
+        );
     }
 
     // Create Left Tab Sidebar container
     let sidebar_box = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     ACTIVE_SIDEBAR_BOX.store(sidebar_box, Ordering::SeqCst);
-    (b.gtk_widget_set_size_request)(sidebar_box, 48, -1);
+    (b.gtk_widget_set_size_request)(sidebar_box, MIN_COLLAPSED_SIDEBAR_WIDTH, -1);
     let sidebar_class = CString::new("sidebar").unwrap();
     (b.gtk_widget_add_css_class)(sidebar_box, sidebar_class.as_ptr());
 
@@ -3260,9 +3386,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_margin_top)(right_header, 10);
     (b.gtk_widget_set_margin_bottom)(right_header, 10);
 
-    let lbl_menu_title = (b.gtk_label_new)(
-        CString::new("Browser Menu & Settings").unwrap().as_ptr(),
-    );
+    let lbl_menu_title =
+        (b.gtk_label_new)(CString::new("Browser Menu & Settings").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_menu_title, 0.0);
     (b.gtk_widget_set_hexpand)(lbl_menu_title, 1);
     let class_title = CString::new("menu-group-title").unwrap();
@@ -3286,23 +3411,19 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_margin_bottom)(panel_vbox, 16);
 
     // Quick Action Buttons Row
-    let quick_card = make_group_card(&b, "⚡ Quick Actions");
+    let quick_card = make_group_card(b, "⚡ Quick Actions");
     let quick_box = (b.gtk_box_new)(1, 4);
-    let btn_side_new_tab = (b.gtk_button_new_with_label)(
-        CString::new("➕  New Tab").unwrap().as_ptr(),
-    );
+    let btn_side_new_tab =
+        (b.gtk_button_new_with_label)(CString::new("➕  New Tab").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_side_new_tab, 0);
-    let btn_side_new_incognito = (b.gtk_button_new_with_label)(
-        CString::new("🌊  New Incognito Window").unwrap().as_ptr(),
-    );
+    let btn_side_new_incognito =
+        (b.gtk_button_new_with_label)(CString::new("🌊  New Incognito Window").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_side_new_incognito, 0);
-    let btn_side_history = (b.gtk_button_new_with_label)(
-        CString::new("🕒  History & Bookmarks").unwrap().as_ptr(),
-    );
+    let btn_side_history =
+        (b.gtk_button_new_with_label)(CString::new("🕒  History & Bookmarks").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_side_history, 0);
-    let btn_side_about = (b.gtk_button_new_with_label)(
-        CString::new("ℹ  About Vingilot").unwrap().as_ptr(),
-    );
+    let btn_side_about =
+        (b.gtk_button_new_with_label)(CString::new("ℹ  About Vingilot").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_side_about, 0);
 
     (b.gtk_box_append)(quick_box, btn_side_new_tab);
@@ -3313,29 +3434,21 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(panel_vbox, quick_card);
 
     // Group 1: Search Engines Preferences
-    let card_search = make_group_card(&b, "🔍 Search Engines Preferences");
+    let card_search = make_group_card(b, "🔍 Search Engines Preferences");
     let lbl_search_desc = (b.gtk_label_new)(
-        CString::new("Quick switch default search engine:").unwrap().as_ptr(),
+        CString::new("Quick switch default search engine:")
+            .unwrap()
+            .as_ptr(),
     );
     (b.gtk_label_set_xalign)(lbl_search_desc, 0.0);
     (b.gtk_box_append)(card_search, lbl_search_desc);
 
     let search_btns_box = (b.gtk_box_new)(0, 4);
-    let btn_ddg = (b.gtk_button_new_with_label)(
-        CString::new("DuckDuckGo").unwrap().as_ptr(),
-    );
-    let btn_google = (b.gtk_button_new_with_label)(
-        CString::new("Google").unwrap().as_ptr(),
-    );
-    let btn_brave = (b.gtk_button_new_with_label)(
-        CString::new("Brave").unwrap().as_ptr(),
-    );
-    let btn_bing = (b.gtk_button_new_with_label)(
-        CString::new("Bing").unwrap().as_ptr(),
-    );
-    let btn_ecosia = (b.gtk_button_new_with_label)(
-        CString::new("Ecosia").unwrap().as_ptr(),
-    );
+    let btn_ddg = (b.gtk_button_new_with_label)(CString::new("DuckDuckGo").unwrap().as_ptr());
+    let btn_google = (b.gtk_button_new_with_label)(CString::new("Google").unwrap().as_ptr());
+    let btn_brave = (b.gtk_button_new_with_label)(CString::new("Brave").unwrap().as_ptr());
+    let btn_bing = (b.gtk_button_new_with_label)(CString::new("Bing").unwrap().as_ptr());
+    let btn_ecosia = (b.gtk_button_new_with_label)(CString::new("Ecosia").unwrap().as_ptr());
 
     (b.gtk_box_append)(search_btns_box, btn_ddg);
     (b.gtk_box_append)(search_btns_box, btn_google);
@@ -3344,14 +3457,16 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(search_btns_box, btn_ecosia);
     (b.gtk_box_append)(card_search, search_btns_box);
 
-    let (row_priv_search, _) = make_switch_row(&b, "Encrypted & Private Queries", true);
+    let (row_priv_search, _) = make_switch_row(b, "Encrypted & Private Queries", true);
     (b.gtk_box_append)(card_search, row_priv_search);
     (b.gtk_box_append)(panel_vbox, card_search);
 
     // Group 2: Theming
-    let card_theme = make_group_card(&b, "🎨 Theming");
+    let card_theme = make_group_card(b, "🎨 Theming");
     let lbl_theme_desc = (b.gtk_label_new)(
-        CString::new("Color scheme and display themes:").unwrap().as_ptr(),
+        CString::new("Color scheme and display themes:")
+            .unwrap()
+            .as_ptr(),
     );
     (b.gtk_label_set_xalign)(lbl_theme_desc, 0.0);
     (b.gtk_box_append)(card_theme, lbl_theme_desc);
@@ -3360,7 +3475,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let btn_theme_sys = (b.gtk_button_new_with_label)(CString::new("System").unwrap().as_ptr());
     let btn_theme_light = (b.gtk_button_new_with_label)(CString::new("Light").unwrap().as_ptr());
     let btn_theme_dark = (b.gtk_button_new_with_label)(CString::new("Dark").unwrap().as_ptr());
-    let btn_theme_black = (b.gtk_button_new_with_label)(CString::new("True Black").unwrap().as_ptr());
+    let btn_theme_black =
+        (b.gtk_button_new_with_label)(CString::new("True Black").unwrap().as_ptr());
     (b.gtk_box_append)(theme_box1, btn_theme_sys);
     (b.gtk_box_append)(theme_box1, btn_theme_light);
     (b.gtk_box_append)(theme_box1, btn_theme_dark);
@@ -3368,13 +3484,13 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(card_theme, theme_box1);
 
     let btn_theme_incog = (b.gtk_button_new_with_label)(
-        CString::new("🌊 Ocean Deep Incognito (#062640)").unwrap().as_ptr(),
+        CString::new("🌊 Ocean Deep Incognito (#062640)")
+            .unwrap()
+            .as_ptr(),
     );
     (b.gtk_box_append)(card_theme, btn_theme_incog);
 
-    let lbl_accent_sel = (b.gtk_label_new)(
-        CString::new("Start Page Accent:").unwrap().as_ptr(),
-    );
+    let lbl_accent_sel = (b.gtk_label_new)(CString::new("Start Page Accent:").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_accent_sel, 0.0);
     (b.gtk_box_append)(card_theme, lbl_accent_sel);
 
@@ -3404,17 +3520,17 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(card_theme, accents_box1);
     (b.gtk_box_append)(card_theme, accents_box2);
 
-    let (row_reader_mode, _) = make_switch_row(&b, "Auto Distraction-Free Reader Mode", true);
+    let (row_reader_mode, _) = make_switch_row(b, "Auto Distraction-Free Reader Mode", true);
     (b.gtk_box_append)(card_theme, row_reader_mode);
     (b.gtk_box_append)(panel_vbox, card_theme);
 
     // Group 3: Webkit Personalisation
-    let card_webkit = make_group_card(&b, "🌐 Webkit Personalisation");
-    let (row_js, _) = make_switch_row(&b, "Enable JavaScript Execution", true);
-    let (row_kinetic, _) = make_switch_row(&b, "Kinetic Momentum Scrolling", true);
-    let (row_cookies, _) = make_switch_row(&b, "Strict Ephemeral Storage (Cookie Isolation)", true);
-    let (row_trackers, _) = make_switch_row(&b, "Enhanced Tracking Protection", true);
-    let (row_article, _) = make_switch_row(&b, "Auto Reader View Detection", true);
+    let card_webkit = make_group_card(b, "🌐 Webkit Personalisation");
+    let (row_js, _) = make_switch_row(b, "Enable JavaScript Execution", true);
+    let (row_kinetic, _) = make_switch_row(b, "Kinetic Momentum Scrolling", true);
+    let (row_cookies, _) = make_switch_row(b, "Strict Ephemeral Storage (Cookie Isolation)", true);
+    let (row_trackers, _) = make_switch_row(b, "Enhanced Tracking Protection", true);
+    let (row_article, _) = make_switch_row(b, "Auto Reader View Detection", true);
     (b.gtk_box_append)(card_webkit, row_js);
     (b.gtk_box_append)(card_webkit, row_kinetic);
     (b.gtk_box_append)(card_webkit, row_cookies);
@@ -3423,12 +3539,12 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(panel_vbox, card_webkit);
 
     // Group 4: HW Decoding and Acceleration
-    let card_hw = make_group_card(&b, "⚡ HW Decoding and Acceleration");
-    let (row_hw_gpu, _) = make_switch_row(&b, "Hardware GPU Acceleration", true);
-    let (row_vulkan, _) = make_switch_row(&b, "Vulkan Graphics Pipeline (GSK)", true);
-    let (row_wayland, _) = make_switch_row(&b, "Native Wayland Compositing", true);
-    let (row_vcodec, _) = make_switch_row(&b, "Hardware Video Decoding (VA-API/NVDEC)", true);
-    let (row_webgl, _) = make_switch_row(&b, "WebGL 2.0 & Canvas Hardware Rendering", true);
+    let card_hw = make_group_card(b, "⚡ HW Decoding and Acceleration");
+    let (row_hw_gpu, _) = make_switch_row(b, "Hardware GPU Acceleration", true);
+    let (row_vulkan, _) = make_switch_row(b, "Vulkan Graphics Pipeline (GSK)", true);
+    let (row_wayland, _) = make_switch_row(b, "Native Wayland Compositing", true);
+    let (row_vcodec, _) = make_switch_row(b, "Hardware Video Decoding (VA-API/NVDEC)", true);
+    let (row_webgl, _) = make_switch_row(b, "WebGL 2.0 & Canvas Hardware Rendering", true);
     (b.gtk_box_append)(card_hw, row_hw_gpu);
     (b.gtk_box_append)(card_hw, row_vulkan);
     (b.gtk_box_append)(card_hw, row_wayland);
@@ -3437,11 +3553,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(panel_vbox, card_hw);
 
     // Group 5: AI Features (with editable fields)
-    let card_ai = make_group_card(&b, "🤖 AI Features");
+    let card_ai = make_group_card(b, "🤖 AI Features");
 
-    let lbl_ai_ep = (b.gtk_label_new)(
-        CString::new("AI Provider Endpoint:").unwrap().as_ptr(),
-    );
+    let lbl_ai_ep = (b.gtk_label_new)(CString::new("AI Provider Endpoint:").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_ai_ep, 0.0);
     let entry_ai_ep = (b.gtk_entry_new)();
     ACTIVE_AI_BASE_URL_ENTRY.store(entry_ai_ep, Ordering::SeqCst);
@@ -3456,24 +3570,19 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         CString::new("http://localhost:11434/v1").unwrap().as_ptr(),
     );
 
-    let lbl_ai_mod = (b.gtk_label_new)(
-        CString::new("AI Model Name:").unwrap().as_ptr(),
-    );
+    let lbl_ai_mod = (b.gtk_label_new)(CString::new("AI Model Name:").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_ai_mod, 0.0);
     let entry_ai_mod = (b.gtk_entry_new)();
     ACTIVE_AI_MODEL_ENTRY.store(entry_ai_mod, Ordering::SeqCst);
     (b.gtk_entry_set_placeholder_text)(
         entry_ai_mod,
-        CString::new("e.g. llama3.2, mistral, gpt-4o-mini").unwrap().as_ptr(),
+        CString::new("e.g. llama3.2, mistral, gpt-4o-mini")
+            .unwrap()
+            .as_ptr(),
     );
-    (b.gtk_editable_set_text)(
-        entry_ai_mod,
-        CString::new("llama3.2").unwrap().as_ptr(),
-    );
+    (b.gtk_editable_set_text)(entry_ai_mod, CString::new("llama3.2").unwrap().as_ptr());
 
-    let lbl_ai_key = (b.gtk_label_new)(
-        CString::new("AI API Key (Optional):").unwrap().as_ptr(),
-    );
+    let lbl_ai_key = (b.gtk_label_new)(CString::new("AI API Key (Optional):").unwrap().as_ptr());
     (b.gtk_label_set_xalign)(lbl_ai_key, 0.0);
     let entry_ai_key = (b.gtk_entry_new)();
     ACTIVE_AI_API_KEY_ENTRY.store(entry_ai_key, Ordering::SeqCst);
@@ -3482,17 +3591,17 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         CString::new("Enter API Key (sk-...)").unwrap().as_ptr(),
     );
 
-    let (row_ai_sum, _) = make_switch_row(&b, "Contextual Web Summarization", true);
-    let (row_ai_mcp, _) = make_switch_row(&b, "Agentic Navigation & MCP Dispatcher", true);
+    let (row_ai_sum, _) = make_switch_row(b, "Contextual Web Summarization", true);
+    let (row_ai_mcp, _) = make_switch_row(b, "Agentic Navigation & MCP Dispatcher", true);
 
     let btn_save_ai = (b.gtk_button_new_with_label)(
-        CString::new("💾  Apply & Save AI Configuration").unwrap().as_ptr(),
+        CString::new("💾  Apply & Save AI Configuration")
+            .unwrap()
+            .as_ptr(),
     );
     (b.gtk_widget_set_margin_top)(btn_save_ai, 6);
 
-    let lbl_ai_status = (b.gtk_label_new)(
-        CString::new("Ready to assist").unwrap().as_ptr(),
-    );
+    let lbl_ai_status = (b.gtk_label_new)(CString::new("Ready to assist").unwrap().as_ptr());
     ACTIVE_AI_STATUS_LABEL.store(lbl_ai_status, Ordering::SeqCst);
     (b.gtk_label_set_xalign)(lbl_ai_status, 0.0);
 
@@ -3600,47 +3709,59 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         on_about_clicked,
     );
 
-    let cb_toggle_menu = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_toggle_right_menu_clicked,
-    );
-    let cb_close_menu = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_close_right_menu_clicked,
-    );
+    let cb_toggle_menu = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_toggle_right_menu_clicked);
+    let cb_close_menu = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_close_right_menu_clicked);
     let cb_save_ai = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
         on_save_ai_settings_clicked,
     );
 
-    let cb_search_ddg = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_search_ddg_clicked,
-    );
-    let cb_search_google = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_search_google_clicked,
-    );
-    let cb_search_brave = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_search_brave_clicked,
-    );
-    let cb_search_bing = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_search_bing_clicked,
-    );
-    let cb_search_ecosia = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_search_ecosia_clicked,
-    );
+    let cb_search_ddg = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_search_ddg_clicked);
+    let cb_search_google = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_search_google_clicked);
+    let cb_search_brave = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_search_brave_clicked);
+    let cb_search_bing = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_search_bing_clicked);
+    let cb_search_ecosia = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_search_ecosia_clicked);
 
-    let cb_theme_sys = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_theme_system_clicked,
-    );
-    let cb_theme_light = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_theme_light_clicked,
-    );
-    let cb_theme_dark = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_theme_dark_clicked,
-    );
-    let cb_theme_black = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_theme_true_black_clicked,
-    );
-    let cb_theme_incog = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_theme_incognito_blue_clicked,
-    );
+    let cb_theme_sys = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_system_clicked);
+    let cb_theme_light = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_light_clicked);
+    let cb_theme_dark = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_dark_clicked);
+    let cb_theme_black = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_true_black_clicked);
+    let cb_theme_incog = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_incognito_blue_clicked);
 
     // Menu toggle and close signals
     (b.g_signal_connect_data)(
@@ -3695,18 +3816,88 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     );
 
     // Search Engine signals in side menu
-    (b.g_signal_connect_data)(btn_ddg, clicked_sig.as_ptr(), cb_search_ddg, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_google, clicked_sig.as_ptr(), cb_search_google, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_brave, clicked_sig.as_ptr(), cb_search_brave, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_bing, clicked_sig.as_ptr(), cb_search_bing, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_ecosia, clicked_sig.as_ptr(), cb_search_ecosia, std::ptr::null_mut(), std::ptr::null_mut(), 0);
+    (b.g_signal_connect_data)(
+        btn_ddg,
+        clicked_sig.as_ptr(),
+        cb_search_ddg,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_google,
+        clicked_sig.as_ptr(),
+        cb_search_google,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_brave,
+        clicked_sig.as_ptr(),
+        cb_search_brave,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_bing,
+        clicked_sig.as_ptr(),
+        cb_search_bing,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_ecosia,
+        clicked_sig.as_ptr(),
+        cb_search_ecosia,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
 
     // Theme signals in side menu
-    (b.g_signal_connect_data)(btn_theme_sys, clicked_sig.as_ptr(), cb_theme_sys, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_theme_light, clicked_sig.as_ptr(), cb_theme_light, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_theme_dark, clicked_sig.as_ptr(), cb_theme_dark, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_theme_black, clicked_sig.as_ptr(), cb_theme_black, std::ptr::null_mut(), std::ptr::null_mut(), 0);
-    (b.g_signal_connect_data)(btn_theme_incog, clicked_sig.as_ptr(), cb_theme_incog, std::ptr::null_mut(), std::ptr::null_mut(), 0);
+    (b.g_signal_connect_data)(
+        btn_theme_sys,
+        clicked_sig.as_ptr(),
+        cb_theme_sys,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_theme_light,
+        clicked_sig.as_ptr(),
+        cb_theme_light,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_theme_dark,
+        clicked_sig.as_ptr(),
+        cb_theme_dark,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_theme_black,
+        clicked_sig.as_ptr(),
+        cb_theme_black,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_theme_incog,
+        clicked_sig.as_ptr(),
+        cb_theme_incog,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
 
     // AI save signal in side menu
     (b.g_signal_connect_data)(

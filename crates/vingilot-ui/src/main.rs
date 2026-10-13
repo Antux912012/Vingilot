@@ -48,7 +48,7 @@ fn main() {
     println!("Active tabs: {}", win.tab_manager().tabs().len());
 
     if is_incognito {
-        println!("Launching in incognito mode: Navigating Shadowy Seas");
+        println!("Launching in incognito mode");
         win.open_new_incognito_tab();
     }
 

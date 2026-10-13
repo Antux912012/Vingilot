@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 
 /// Normalizes a URL for hashing and storage (strips fragment and trims).
 pub fn normalize_url_for_preview(url: &str) -> String {
@@ -30,7 +30,10 @@ pub fn default_data_dir() -> PathBuf {
     }
     if let Ok(home) = std::env::var("HOME") {
         if !home.trim().is_empty() {
-            return PathBuf::from(home).join(".local").join("share").join("vingilot");
+            return PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("vingilot");
         }
     }
     PathBuf::from("/tmp/vingilot")

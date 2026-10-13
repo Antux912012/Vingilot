@@ -147,7 +147,11 @@ impl<'a> BookmarkManager<'a> {
     }
 
     /// Checks if `possible_descendant_id` is inside `ancestor_id`.
-    pub fn is_descendant(&self, ancestor_id: Uuid, possible_descendant_id: Uuid) -> CoreResult<bool> {
+    pub fn is_descendant(
+        &self,
+        ancestor_id: Uuid,
+        possible_descendant_id: Uuid,
+    ) -> CoreResult<bool> {
         let mut curr = Some(possible_descendant_id);
         while let Some(id) = curr {
             if id == ancestor_id {
@@ -246,7 +250,9 @@ mod tests {
 
         let work = store.create_folder("Work", None).unwrap();
         let proj = store.create_folder("Projects", Some(work.id)).unwrap();
-        let bm = store.create_bookmark("GitHub", "https://github.com", None).unwrap();
+        let bm = store
+            .create_bookmark("GitHub", "https://github.com", None)
+            .unwrap();
 
         // Check root items
         let root_items = store.get_root_items().unwrap();
