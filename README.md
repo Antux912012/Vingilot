@@ -1,13 +1,24 @@
-# Vingilot 🚢
+<p align="center">
+  <img src="data/icons/hicolor/128x128/apps/io.github.antux912012.Vingilot.png" alt="Vingilot Logo" width="128" height="128">
+</p>
 
-> *“Eärendil was a mariner that tarried in Arvernien; he built a ship of timber felled in Nimbrethil to journey in; her sails he wove of silver fair, of silver were her lanterns made...”*
+<h1 align="center">Vingilot</h1>
 
-[![Status: Work in Progress](https://img.shields.io/badge/Status-Work_in_Progress-amber.svg)](#status)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Wayland%20%7C%20Flatpak-blue.svg)](#installation)
-[![Engine](https://img.shields.io/badge/Engine-WebKitGTK%206.0-green.svg)](#architecture)
-[![UI](https://img.shields.io/badge/UI-Libadwaita%20%2F%20GTK4-purple.svg)](#architecture)
+<p align="center">
+  <strong>Native GTK4 & Libadwaita Web Browser for Linux</strong><br>
+  <em>“Eärendil was a mariner that tarried in Arvernien; he built a ship of timber felled in Nimbrethil to journey in; her sails he wove of silver fair, of silver were her lanterns made...”</em>
+</p>
 
-**Vingilot** is a modern, lightweight, and privacy-focused web browser built with **Libadwaita (GTK4)** and **WebKitGTK 6.0**, optimized for native **Wayland** compositing and hardware-accelerated **Vulkan** rendering.
+<p align="center">
+  <a href="#-distribution-packages"><img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Wayland-blue.svg" alt="Platform"></a>
+  <a href="#1-flatpak-bundle"><img src="https://img.shields.io/badge/Flatpak-Supported-blue.svg" alt="Flatpak"></a>
+  <a href="#2-debian--ubuntu-package-deb"><img src="https://img.shields.io/badge/Debian%20%2F%20Ubuntu-.deb-red.svg" alt="Debian"></a>
+  <a href="#3-portable-appimage"><img src="https://img.shields.io/badge/AppImage-x86__64-orange.svg" alt="AppImage"></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/Engine-WebKitGTK%206.0-green.svg" alt="Engine"></a>
+  <a href="#architecture"><img src="https://img.shields.io/badge/UI-Libadwaita%20%2F%20GTK4-purple.svg" alt="UI"></a>
+</p>
+
+**Vingilot** is a modern, lightweight, and privacy-focused web browser built with **Libadwaita (GTK4)** and **WebKitGTK 6.0**, optimized for native **Wayland** compositing and hardware-accelerated **Vulkan/OpenGL** rendering.
 
 ---
 
@@ -20,6 +31,10 @@
 ## ✨ Features
 
 - **Native Libadwaita Design**: Fluid GNOME-native interface adhering to GNOME Human Interface Guidelines (HIG).
+- **Zen-Style Vertical Tabs**: Collapsible left sidebar tabs featuring website favicons, title truncation, and Zen-style top-left close badges (`×`) on hover.
+- **Dynamic Start Page & Accent Sync**: Native Libadwaita Start Page with customizable GNOME color palette circles that dynamically tint the title HeaderBar and sidebar tabs.
+- **Full Right-Click Context Menus**: Native WebKit developer inspector and right-click menus on web pages (Back, Forward, Reload, Copy, Inspect Element, Open Link in New Tab) plus dedicated tab context menus (Reload, Duplicate, Close Tab, Mute, Pin).
+- **Vingilot Shield Ad-Blocker**: Built-in native WebKit content filtering compiled directly into the rendering engine.
 - **Wayland & Vulkan Acceleration**: Native Wayland protocol integration and high-performance GPU scene-graph rendering powered by GTK Scene Kit (GSK) and Mesa Vulkan drivers (`libvulkan` / `anv`).
 - **Header Bar 3-Dots Menu (`⋮`)**: Convenient top-right menu button aligned with window controls providing quick access to:
   - **Preferences**: Deep customization including OLED True Black themes, search engines, hardware acceleration toggles, and privacy controls.
