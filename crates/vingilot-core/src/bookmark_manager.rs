@@ -98,6 +98,36 @@ impl<'a> BookmarkManager<'a> {
         self.repo.rename(item_id, new_title)
     }
 
+    /// Updates an existing bookmark's title and URL.
+    pub fn update_bookmark(
+        &self,
+        item_id: Uuid,
+        new_title: &str,
+        new_url: &str,
+    ) -> CoreResult<bool> {
+        self.repo.update_bookmark(item_id, new_title, new_url)
+    }
+
+    /// Searches bookmarks and folders matching the query string.
+    pub fn search(&self, query: &str) -> CoreResult<Vec<BookmarkNode>> {
+        self.repo.search(query)
+    }
+
+    /// Counts all descendants inside a folder.
+    pub fn count_descendants(&self, folder_id: Uuid) -> CoreResult<usize> {
+        self.repo.count_descendants(folder_id)
+    }
+
+    /// Collects all URLs contained inside a folder and its subfolders.
+    pub fn list_all_urls_in_folder(&self, folder_id: Uuid) -> CoreResult<Vec<String>> {
+        self.repo.list_all_urls_in_folder(folder_id)
+    }
+
+    /// Deletes a folder and all its contents recursively.
+    pub fn delete_folder_recursive(&self, folder_id: Uuid) -> CoreResult<usize> {
+        self.repo.delete_folder_recursive(folder_id)
+    }
+
     /// Deletes a folder or bookmark item.
     pub fn delete_item(&self, item_id: Uuid) -> CoreResult<bool> {
         self.repo.delete(item_id)
@@ -290,5 +320,58 @@ mod tests {
         // Delete item
         assert!(store.delete_item(bm.id).unwrap());
         assert!(store.get_bookmark(bm.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_bookmark_update_search_and_recursive_delete() {
+        let db = Database::in_memory().unwrap();
+        let store = BookmarkStore::new(&db);
+
+        let folder = store.create_folder("Reading List", None).unwrap();
+        let subfolder = store.create_folder("Articles", Some(folder.id)).unwrap();
+        let bm1 = store
+            .create_bookmark("Mozilla", "https://mozilla.org", Some(folder.id))
+            .unwrap();
+        let bm2 = store
+            .create_bookmark(
+                "Rust Book",
+                "https://doc.rust-lang.org/book",
+                Some(subfolder.id),
+            )
+            .unwrap();
+
+        // Count descendants
+        assert_eq!(store.count_descendants(folder.id).unwrap(), 3); // subfolder, bm1, bm2
+        assert_eq!(store.count_descendants(subfolder.id).unwrap(), 1); // bm2
+
+        // List URLs in folder
+        let urls = store.list_all_urls_in_folder(folder.id).unwrap();
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&"https://mozilla.org".to_string()));
+        assert!(urls.contains(&"https://doc.rust-lang.org/book".to_string()));
+
+        // Update bookmark
+        assert!(store
+            .update_bookmark(bm1.id, "Mozilla Foundation", "https://www.mozilla.org")
+            .unwrap());
+        let updated = store.get_bookmark(bm1.id).unwrap().unwrap();
+        assert_eq!(updated.title, "Mozilla Foundation");
+        assert_eq!(updated.url.as_deref(), Some("https://www.mozilla.org"));
+
+        // Search bookmarks
+        let search_res = store.search("Mozilla").unwrap();
+        assert_eq!(search_res.len(), 1);
+        assert_eq!(search_res[0].id, bm1.id);
+
+        let search_book = store.search("book").unwrap();
+        assert_eq!(search_book.len(), 1);
+        assert_eq!(search_book[0].id, bm2.id);
+
+        // Recursive delete folder
+        let deleted_count = store.delete_folder_recursive(folder.id).unwrap();
+        assert_eq!(deleted_count, 4); // folder + subfolder + bm1 + bm2
+        assert_eq!(store.get_root_items().unwrap().len(), 0);
+        assert!(store.get_bookmark(bm1.id).unwrap().is_none());
+        assert!(store.get_bookmark(bm2.id).unwrap().is_none());
     }
 }

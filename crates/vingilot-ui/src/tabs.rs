@@ -10,6 +10,7 @@ pub struct Tab {
     pub engine: WebKitEngine,
     pub is_incognito: bool,
     pub is_pinned: bool,
+    pub is_muted: bool,
     pub favicon_ptr: usize,
     pub is_start_page: bool,
 }
@@ -37,6 +38,7 @@ impl Tab {
             engine: WebKitEngine::new(config),
             is_incognito,
             is_pinned: false,
+            is_muted: false,
             favicon_ptr: 0,
             is_start_page: !is_incognito,
         }
@@ -76,11 +78,28 @@ impl Tab {
     }
 }
 
+/// Metadata of a recently closed tab for reopening.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ClosedTab {
+    pub url: String,
+    pub title: String,
+    pub is_pinned: bool,
+}
+
+/// Persisted tab session record for application restart.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SavedSessionTab {
+    pub url: String,
+    pub title: String,
+    pub is_pinned: bool,
+}
+
 /// Manages multiple tabs and tracking active selection.
 #[derive(Debug)]
 pub struct TabManager {
     tabs: Vec<Tab>,
     active_index: usize,
+    closed_tabs: Vec<ClosedTab>,
 }
 
 impl Default for TabManager {
@@ -95,6 +114,7 @@ impl TabManager {
         Self {
             tabs: vec![initial_tab],
             active_index: 0,
+            closed_tabs: Vec::new(),
         }
     }
 
@@ -112,6 +132,14 @@ impl TabManager {
 
     pub fn active_tab_mut(&mut self) -> Option<&mut Tab> {
         self.tabs.get_mut(self.active_index)
+    }
+
+    pub fn closed_tabs(&self) -> &[ClosedTab] {
+        &self.closed_tabs
+    }
+
+    pub fn can_reopen_tab(&self) -> bool {
+        !self.closed_tabs.is_empty()
     }
 
     /// Opens a new standard tab.
@@ -132,12 +160,42 @@ impl TabManager {
         id
     }
 
+    /// Duplicates the tab at `index`, inserting it next to the source tab.
+    pub fn duplicate_tab(&mut self, index: usize) -> Option<Uuid> {
+        let source = self.tabs.get(index)?;
+        let mut new_tab = Tab::new(source.is_incognito);
+        new_tab.url = source.url.clone();
+        new_tab.title = source.title.clone();
+        new_tab.is_start_page = source.is_start_page;
+        new_tab.is_pinned = source.is_pinned;
+        let id = new_tab.id;
+
+        let insert_idx = index + 1;
+        self.tabs.insert(insert_idx, new_tab);
+        self.active_index = insert_idx;
+        Some(id)
+    }
+
     /// Closes the tab at `index`. If last tab is closed, opens a fresh tab.
+    /// Non-incognito closed tabs are pushed to `closed_tabs` stack.
     pub fn close_tab(&mut self, index: usize) -> bool {
         if index >= self.tabs.len() {
             return false;
         }
-        self.tabs.remove(index);
+        let removed = self.tabs.remove(index);
+
+        // Store into closed_tabs history if not incognito
+        if !removed.is_incognito && !removed.url.is_empty() && removed.url != "about:blank" {
+            self.closed_tabs.push(ClosedTab {
+                url: removed.url,
+                title: removed.title,
+                is_pinned: removed.is_pinned,
+            });
+            if self.closed_tabs.len() > 30 {
+                self.closed_tabs.remove(0);
+            }
+        }
+
         if self.tabs.is_empty() {
             self.tabs.push(Tab::new(false));
             self.active_index = 0;
@@ -145,6 +203,85 @@ impl TabManager {
             self.active_index = self.tabs.len() - 1;
         }
         true
+    }
+
+    /// Closes all tabs except `keep_index`.
+    pub fn close_other_tabs(&mut self, keep_index: usize) -> bool {
+        if keep_index >= self.tabs.len() {
+            return false;
+        }
+        let keep_tab = self.tabs.remove(keep_index);
+
+        for tab in self.tabs.drain(..) {
+            if !tab.is_incognito && !tab.url.is_empty() && tab.url != "about:blank" {
+                self.closed_tabs.push(ClosedTab {
+                    url: tab.url,
+                    title: tab.title,
+                    is_pinned: tab.is_pinned,
+                });
+            }
+        }
+
+        self.tabs.push(keep_tab);
+        self.active_index = 0;
+        true
+    }
+
+    /// Closes all tabs to the right of `from_index`.
+    pub fn close_tabs_to_right(&mut self, from_index: usize) -> bool {
+        if from_index >= self.tabs.len() {
+            return false;
+        }
+
+        let to_remove: Vec<_> = self.tabs.drain(from_index + 1..).collect();
+        for tab in to_remove {
+            if !tab.is_incognito && !tab.url.is_empty() && tab.url != "about:blank" {
+                self.closed_tabs.push(ClosedTab {
+                    url: tab.url,
+                    title: tab.title,
+                    is_pinned: tab.is_pinned,
+                });
+            }
+        }
+
+        if self.active_index >= self.tabs.len() {
+            self.active_index = self.tabs.len() - 1;
+        }
+        true
+    }
+
+    /// Reopens the most recently closed tab.
+    pub fn reopen_closed_tab(&mut self) -> Option<Uuid> {
+        let closed = self.closed_tabs.pop()?;
+        let mut tab = Tab::new(false);
+        tab.url = closed.url.clone();
+        tab.title = closed.title.clone();
+        tab.is_pinned = closed.is_pinned;
+        tab.is_start_page = closed.url == "about:blank" || closed.url == "browser://start";
+        let id = tab.id;
+        self.tabs.push(tab);
+        self.active_index = self.tabs.len() - 1;
+        Some(id)
+    }
+
+    /// Sets muted state on a tab.
+    pub fn set_muted(&mut self, index: usize, muted: bool) -> bool {
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.is_muted = muted;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Toggles audio mute state on a tab.
+    pub fn toggle_mute(&mut self, index: usize) -> bool {
+        if let Some(tab) = self.tabs.get_mut(index) {
+            tab.is_muted = !tab.is_muted;
+            true
+        } else {
+            false
+        }
     }
 
     /// Switches the active tab to `index`.
@@ -206,6 +343,60 @@ impl TabManager {
         }
         true
     }
+
+    /// Saves session to JSON. Only normal non-incognito tabs are saved.
+    pub fn save_session(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let normal_tabs: Vec<SavedSessionTab> = self
+            .tabs
+            .iter()
+            .filter(|t| !t.is_incognito && !t.url.is_empty() && t.url != "about:blank")
+            .map(|t| SavedSessionTab {
+                url: t.url.clone(),
+                title: t.title.clone(),
+                is_pinned: t.is_pinned,
+            })
+            .collect();
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(&normal_tabs)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, json)
+    }
+
+    /// Restores session from JSON.
+    pub fn restore_session(&mut self, path: &std::path::Path) -> std::io::Result<usize> {
+        if !path.exists() {
+            return Ok(0);
+        }
+        let content = std::fs::read_to_string(path)?;
+        let saved_tabs: Vec<SavedSessionTab> = serde_json::from_str(&content)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        if saved_tabs.is_empty() {
+            return Ok(0);
+        }
+
+        // Replace blank initial tab if only 1 blank tab exists
+        let replace_initial = self.tabs.len() == 1
+            && (self.tabs[0].url.is_empty() || self.tabs[0].url == "about:blank");
+        if replace_initial {
+            self.tabs.clear();
+        }
+
+        let count = saved_tabs.len();
+        for saved in saved_tabs {
+            let mut tab = Tab::new(false);
+            tab.url = saved.url.clone();
+            tab.title = saved.title;
+            tab.is_pinned = saved.is_pinned;
+            tab.is_start_page = saved.url == "about:blank" || saved.url == "browser://start";
+            self.tabs.push(tab);
+        }
+        self.active_index = 0;
+        Ok(count)
+    }
 }
 
 #[cfg(test)]
@@ -258,5 +449,85 @@ mod tests {
         assert!(mgr.reorder_tab(1, 0));
         assert!(!mgr.tabs()[0].is_pinned);
         assert!(mgr.tabs()[1].is_pinned);
+    }
+
+    #[test]
+    fn test_tab_duplicate_mute_and_extended_closures() {
+        let mut mgr = TabManager::new();
+        mgr.active_tab_mut().unwrap().url = "https://tab0.com".to_string();
+        mgr.active_tab_mut().unwrap().title = "Tab 0".to_string();
+
+        let _id1 = mgr.new_tab();
+        mgr.active_tab_mut().unwrap().url = "https://tab1.com".to_string();
+        mgr.active_tab_mut().unwrap().title = "Tab 1".to_string();
+
+        let _id2 = mgr.new_tab();
+        mgr.active_tab_mut().unwrap().url = "https://tab2.com".to_string();
+        mgr.active_tab_mut().unwrap().title = "Tab 2".to_string();
+
+        assert_eq!(mgr.tabs().len(), 3);
+
+        // Duplicate tab 1
+        let dup_id = mgr.duplicate_tab(1).unwrap();
+        assert_eq!(mgr.tabs().len(), 4);
+        assert_eq!(mgr.tabs()[2].id, dup_id);
+        assert_eq!(mgr.tabs()[2].url, "https://tab1.com");
+
+        // Audio mute toggle
+        assert!(!mgr.tabs()[2].is_muted);
+        assert!(mgr.toggle_mute(2));
+        assert!(mgr.tabs()[2].is_muted);
+
+        // Close tabs to right of tab 1
+        assert!(mgr.close_tabs_to_right(1));
+        assert_eq!(mgr.tabs().len(), 2);
+        assert_eq!(mgr.tabs()[0].url, "https://tab0.com");
+        assert_eq!(mgr.tabs()[1].url, "https://tab1.com");
+
+        // Reopen closed tab
+        assert!(mgr.can_reopen_tab());
+        let reopened_id = mgr.reopen_closed_tab().unwrap();
+        assert_eq!(mgr.tabs().len(), 3);
+        assert_eq!(mgr.active_tab().unwrap().id, reopened_id);
+
+        // Close other tabs keeping tab 0
+        assert!(mgr.close_other_tabs(0));
+        assert_eq!(mgr.tabs().len(), 1);
+        assert_eq!(mgr.tabs()[0].url, "https://tab0.com");
+    }
+
+    #[test]
+    fn test_tab_session_persistence_excludes_incognito() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vingilot_test_session_{}", uuid::Uuid::new_v4()));
+        let session_file = temp_dir.join("session.json");
+
+        let mut mgr = TabManager::new();
+        mgr.active_tab_mut().unwrap().url = "https://normal-tab.org".to_string();
+        mgr.active_tab_mut().unwrap().title = "Normal Tab".to_string();
+
+        // Incognito tab
+        mgr.new_incognito_tab();
+        mgr.active_tab_mut().unwrap().url = "https://secret-bank.org".to_string();
+        mgr.active_tab_mut().unwrap().title = "Secret Bank".to_string();
+
+        assert_eq!(mgr.tabs().len(), 2);
+
+        // Save session
+        mgr.save_session(&session_file).unwrap();
+
+        // Verify JSON contents directly to guarantee privacy
+        let saved_content = std::fs::read_to_string(&session_file).unwrap();
+        assert!(saved_content.contains("https://normal-tab.org"));
+        assert!(!saved_content.contains("https://secret-bank.org"));
+
+        // Restore into fresh manager
+        let mut fresh_mgr = TabManager::new();
+        let restored = fresh_mgr.restore_session(&session_file).unwrap();
+        assert_eq!(restored, 1);
+        assert_eq!(fresh_mgr.tabs().len(), 1);
+        assert_eq!(fresh_mgr.tabs()[0].url, "https://normal-tab.org");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

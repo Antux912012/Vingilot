@@ -252,6 +252,73 @@ impl StartPageModel {
         Ok(ok)
     }
 
+    /// Updates a bookmark's title and URL.
+    pub fn update_bookmark(
+        &mut self,
+        db: &Database,
+        profile_id: Uuid,
+        item_id: Uuid,
+        new_title: &str,
+        new_url: &str,
+    ) -> CoreResult<bool> {
+        let store = BookmarkStore::new(db);
+        let ok = store.update_bookmark(item_id, new_title, new_url)?;
+        if ok {
+            self.reload(db, profile_id)?;
+        }
+        Ok(ok)
+    }
+
+    /// Deletes a folder and all descendants recursively.
+    pub fn delete_folder_recursive(
+        &mut self,
+        db: &Database,
+        profile_id: Uuid,
+        folder_id: Uuid,
+    ) -> CoreResult<usize> {
+        let store = BookmarkStore::new(db);
+        let count = store.delete_folder_recursive(folder_id)?;
+        self.reload(db, profile_id)?;
+        Ok(count)
+    }
+
+    /// Counts the number of descendants inside a folder.
+    pub fn count_folder_descendants(&self, db: &Database, folder_id: Uuid) -> CoreResult<usize> {
+        let store = BookmarkStore::new(db);
+        store.count_descendants(folder_id)
+    }
+
+    /// Collects all URLs in a folder and subfolders.
+    pub fn list_all_urls_in_folder(
+        &self,
+        db: &Database,
+        folder_id: Uuid,
+    ) -> CoreResult<Vec<String>> {
+        let store = BookmarkStore::new(db);
+        store.list_all_urls_in_folder(folder_id)
+    }
+
+    /// Searches bookmarks by title or URL.
+    pub fn search_bookmarks(
+        &self,
+        db: &Database,
+        query: &str,
+    ) -> CoreResult<Vec<BookmarkTileItem>> {
+        let store = BookmarkStore::new(db);
+        let results = store.search(query)?;
+        Ok(results
+            .into_iter()
+            .map(|node| BookmarkTileItem {
+                id: node.id,
+                parent_id: node.parent_id,
+                title: node.title,
+                url: node.url,
+                is_folder: node.is_folder,
+                position: node.position,
+            })
+            .collect())
+    }
+
     /// Deletes a bookmark or folder.
     pub fn delete_item(
         &mut self,
@@ -483,5 +550,54 @@ mod tests {
             .move_item(&db, profile_id, folder_a, Some(folder_b))
             .unwrap();
         assert!(!cycle_move2);
+    }
+
+    #[test]
+    fn test_start_page_bookmark_crud_and_search() {
+        let db = Database::in_memory().unwrap();
+        let pm = vingilot_core::profile_manager::ProfileManager::new(&db, "/tmp");
+        let profiles = pm.initialize_default_profiles().unwrap();
+        let profile_id = profiles[0].id;
+
+        let mut model = StartPageModel::new();
+        model.reload(&db, profile_id).unwrap();
+
+        let folder = model.create_folder(&db, profile_id, "Dev Tools").unwrap();
+        let bm = model
+            .create_bookmark(&db, profile_id, "Editor", "https://editor.org")
+            .unwrap();
+
+        // Update bookmark
+        assert!(model
+            .update_bookmark(
+                &db,
+                profile_id,
+                bm,
+                "Code Editor",
+                "https://code.editor.org"
+            )
+            .unwrap());
+        let updated = model.bookmark_items.iter().find(|b| b.id == bm).unwrap();
+        assert_eq!(updated.title, "Code Editor");
+        assert_eq!(updated.url.as_deref(), Some("https://code.editor.org"));
+
+        // Search bookmarks
+        let search_results = model.search_bookmarks(&db, "Code").unwrap();
+        assert_eq!(search_results.len(), 1);
+        assert_eq!(search_results[0].title, "Code Editor");
+
+        // Move bookmark into folder
+        assert!(model.move_item(&db, profile_id, bm, Some(folder)).unwrap());
+        assert_eq!(model.count_folder_descendants(&db, folder).unwrap(), 1);
+
+        let urls = model.list_all_urls_in_folder(&db, folder).unwrap();
+        assert_eq!(urls, vec!["https://code.editor.org".to_string()]);
+
+        // Delete folder recursively
+        let deleted = model
+            .delete_folder_recursive(&db, profile_id, folder)
+            .unwrap();
+        assert_eq!(deleted, 2); // folder + bm
+        assert_eq!(model.bookmark_items.len(), 0);
     }
 }

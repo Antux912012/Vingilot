@@ -227,6 +227,65 @@ impl<'a> BookmarkRepository<'a> {
         })
     }
 
+    pub fn update_bookmark(&self, id: Uuid, title: &str, url: &str) -> CoreResult<bool> {
+        let now = Utc::now();
+        let count = self.db.conn().execute(
+            "UPDATE bookmarks SET title = ?1, url = ?2, updated_at = ?3 WHERE id = ?4",
+            params![title, url, now.to_rfc3339(), id.to_string()],
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn search(&self, query: &str) -> CoreResult<Vec<BookmarkNode>> {
+        let pattern = format!("%{}%", query.trim());
+        let mut stmt = self.db.conn().prepare(
+            r#"
+            SELECT id, parent_id, title, url, is_folder, position, created_at, updated_at
+            FROM bookmarks
+            WHERE title LIKE ?1 OR (url IS NOT NULL AND url LIKE ?1)
+            ORDER BY is_folder DESC, title ASC
+            "#,
+        )?;
+
+        let rows = stmt.query_map(params![pattern], Self::map_row)?;
+        let mut nodes = Vec::new();
+        for item in rows {
+            nodes.push(item?);
+        }
+        Ok(nodes)
+    }
+
+    pub fn count_descendants(&self, folder_id: Uuid) -> CoreResult<usize> {
+        let mut total = 0;
+        let children = self.list_by_parent(Some(folder_id))?;
+        for child in children {
+            total += 1;
+            if child.is_folder {
+                total += self.count_descendants(child.id)?;
+            }
+        }
+        Ok(total)
+    }
+
+    pub fn list_all_urls_in_folder(&self, folder_id: Uuid) -> CoreResult<Vec<String>> {
+        let mut urls = Vec::new();
+        let children = self.list_by_parent(Some(folder_id))?;
+        for child in children {
+            if child.is_folder {
+                urls.extend(self.list_all_urls_in_folder(child.id)?);
+            } else if let Some(u) = child.url {
+                urls.push(u);
+            }
+        }
+        Ok(urls)
+    }
+
+    pub fn delete_folder_recursive(&self, folder_id: Uuid) -> CoreResult<usize> {
+        let total = self.count_descendants(folder_id)? + 1;
+        self.delete(folder_id)?;
+        Ok(total)
+    }
+
     pub fn delete(&self, id: Uuid) -> CoreResult<bool> {
         let count = self.db.conn().execute(
             "DELETE FROM bookmarks WHERE id = ?1",
