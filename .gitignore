@@ -15,3 +15,7 @@ run_data/
 /build-dir/
 /repo/
 *.flatpak
+/build/
+/dist/
+*.deb
+*.AppImage

@@ -33,14 +33,12 @@
 
 ---
 
-## 📦 Flatpak Distribution
+## 📦 Distribution Packages
 
-Vingilot is packaged as an isolated, secure Flatpak bundle with Wayland, DRI/Vulkan, audio, and IPC sharing permissions.
+Vingilot is distributed in three formats: **Flatpak**, **Debian/Ubuntu (.deb)**, and standalone **AppImage**.
 
-### Option 1: Install Prebuilt Flatpak Bundle
-
-Download `io.github.antux912012.Vingilot.flatpak` from the [GitHub Releases](https://github.com/Antux912012/Vingilot/releases) page and install it:
-
+### 1. Flatpak Bundle
+Vingilot is packaged as an isolated Flatpak bundle with Wayland, Vulkan, audio, and IPC sharing permissions:
 ```bash
 # Install the Flatpak bundle
 flatpak install io.github.antux912012.Vingilot.flatpak
@@ -49,16 +47,43 @@ flatpak install io.github.antux912012.Vingilot.flatpak
 flatpak run io.github.antux912012.Vingilot
 ```
 
-### Option 2: Run with Specific GPU Renderers
+### 2. Debian / Ubuntu Package (`.deb`)
+Native `.deb` package for Debian, Ubuntu, Linux Mint, Pop!_OS, and other Debian derivatives:
+```bash
+# Build the .deb package locally
+./scripts/build-deb.sh
 
-Vingilot supports explicit renderer selection via GTK Scene Kit:
+# Install the generated .deb package
+sudo apt install ./dist/vingilot_0.1.2-1_amd64.deb
 
+# Run Vingilot
+vingilot-ui
+```
+
+### 3. Portable AppImage
+Zero-install, single-file executable for 64-bit Linux:
+```bash
+# Build the AppImage locally
+./scripts/build-appimage.sh
+
+# Make executable and run
+chmod +x ./dist/Vingilot-0.1.2-x86_64.AppImage
+./dist/Vingilot-0.1.2-x86_64.AppImage
+```
+
+You can also build both `.deb` and `.AppImage` packages simultaneously using:
+```bash
+./scripts/build-all.sh
+```
+
+### Advanced GPU Renderer Selection
+Vingilot supports explicit GTK Scene Kit (GSK) renderer overrides:
 ```bash
 # Force Vulkan rendering
-flatpak run --env=GSK_RENDERER=vulkan io.github.antux912012.Vingilot
+GSK_RENDERER=vulkan vingilot-ui
 
-# Force modern OpenGL (ngl) rendering
-flatpak run --env=GSK_RENDERER=ngl io.github.antux912012.Vingilot
+# Force OpenGL rendering
+GSK_RENDERER=gl vingilot-ui
 ```
 
 ---
