@@ -13,11 +13,17 @@ pub struct Tab {
     pub is_muted: bool,
     pub favicon_ptr: usize,
     pub is_start_page: bool,
+    pub profile_id: String,
 }
 
 impl Tab {
     /// Creates a new tab. If `is_incognito` is true, runs in incognito mode.
     pub fn new(is_incognito: bool) -> Self {
+        Self::new_with_profile(is_incognito, "standard")
+    }
+
+    /// Creates a new tab associated with a specific profile.
+    pub fn new_with_profile(is_incognito: bool, profile_id: &str) -> Self {
         let config = WebKitEngineConfig {
             data_directory: None, // Ephemeral if incognito
             cache_directory: None,
@@ -41,6 +47,7 @@ impl Tab {
             is_muted: false,
             favicon_ptr: 0,
             is_start_page: !is_incognito,
+            profile_id: profile_id.to_string(),
         }
     }
 
@@ -78,12 +85,18 @@ impl Tab {
     }
 }
 
+fn default_profile_id() -> String {
+    "standard".to_string()
+}
+
 /// Metadata of a recently closed tab for reopening.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ClosedTab {
     pub url: String,
     pub title: String,
     pub is_pinned: bool,
+    #[serde(default = "default_profile_id")]
+    pub profile_id: String,
 }
 
 /// Persisted tab session record for application restart.
@@ -92,6 +105,8 @@ pub struct SavedSessionTab {
     pub url: String,
     pub title: String,
     pub is_pinned: bool,
+    #[serde(default = "default_profile_id")]
+    pub profile_id: String,
 }
 
 /// Manages multiple tabs and tracking active selection.
@@ -144,7 +159,12 @@ impl TabManager {
 
     /// Opens a new standard tab.
     pub fn new_tab(&mut self) -> Uuid {
-        let tab = Tab::new(false);
+        self.new_tab_for_profile("standard")
+    }
+
+    /// Opens a new tab associated with a specific profile.
+    pub fn new_tab_for_profile(&mut self, profile_id: &str) -> Uuid {
+        let tab = Tab::new_with_profile(false, profile_id);
         let id = tab.id;
         self.tabs.push(tab);
         self.active_index = self.tabs.len() - 1;
@@ -163,7 +183,7 @@ impl TabManager {
     /// Duplicates the tab at `index`, inserting it next to the source tab.
     pub fn duplicate_tab(&mut self, index: usize) -> Option<Uuid> {
         let source = self.tabs.get(index)?;
-        let mut new_tab = Tab::new(source.is_incognito);
+        let mut new_tab = Tab::new_with_profile(source.is_incognito, &source.profile_id);
         new_tab.url = source.url.clone();
         new_tab.title = source.title.clone();
         new_tab.is_start_page = source.is_start_page;
@@ -177,19 +197,25 @@ impl TabManager {
     }
 
     /// Closes the tab at `index`. If last tab is closed, opens a fresh tab.
-    /// Non-incognito closed tabs are pushed to `closed_tabs` stack.
+    /// Non-incognito non-ephemeral closed tabs are pushed to `closed_tabs` stack.
     pub fn close_tab(&mut self, index: usize) -> bool {
         if index >= self.tabs.len() {
             return false;
         }
         let removed = self.tabs.remove(index);
 
-        // Store into closed_tabs history if not incognito
-        if !removed.is_incognito && !removed.url.is_empty() && removed.url != "about:blank" {
+        // Store into closed_tabs history if not incognito or ephemeral profile
+        if !removed.is_incognito
+            && removed.profile_id != "guest"
+            && removed.profile_id != "high-security"
+            && !removed.url.is_empty()
+            && removed.url != "about:blank"
+        {
             self.closed_tabs.push(ClosedTab {
                 url: removed.url,
                 title: removed.title,
                 is_pinned: removed.is_pinned,
+                profile_id: removed.profile_id,
             });
             if self.closed_tabs.len() > 30 {
                 self.closed_tabs.remove(0);
@@ -213,11 +239,17 @@ impl TabManager {
         let keep_tab = self.tabs.remove(keep_index);
 
         for tab in self.tabs.drain(..) {
-            if !tab.is_incognito && !tab.url.is_empty() && tab.url != "about:blank" {
+            if !tab.is_incognito
+                && tab.profile_id != "guest"
+                && tab.profile_id != "high-security"
+                && !tab.url.is_empty()
+                && tab.url != "about:blank"
+            {
                 self.closed_tabs.push(ClosedTab {
                     url: tab.url,
                     title: tab.title,
                     is_pinned: tab.is_pinned,
+                    profile_id: tab.profile_id,
                 });
             }
         }
@@ -235,11 +267,17 @@ impl TabManager {
 
         let to_remove: Vec<_> = self.tabs.drain(from_index + 1..).collect();
         for tab in to_remove {
-            if !tab.is_incognito && !tab.url.is_empty() && tab.url != "about:blank" {
+            if !tab.is_incognito
+                && tab.profile_id != "guest"
+                && tab.profile_id != "high-security"
+                && !tab.url.is_empty()
+                && tab.url != "about:blank"
+            {
                 self.closed_tabs.push(ClosedTab {
                     url: tab.url,
                     title: tab.title,
                     is_pinned: tab.is_pinned,
+                    profile_id: tab.profile_id,
                 });
             }
         }
@@ -253,7 +291,7 @@ impl TabManager {
     /// Reopens the most recently closed tab.
     pub fn reopen_closed_tab(&mut self) -> Option<Uuid> {
         let closed = self.closed_tabs.pop()?;
-        let mut tab = Tab::new(false);
+        let mut tab = Tab::new_with_profile(false, &closed.profile_id);
         tab.url = closed.url.clone();
         tab.title = closed.title.clone();
         tab.is_pinned = closed.is_pinned;
@@ -344,16 +382,23 @@ impl TabManager {
         true
     }
 
-    /// Saves session to JSON. Only normal non-incognito tabs are saved.
+    /// Saves session to JSON. Only normal non-incognito non-ephemeral tabs are saved.
     pub fn save_session(&self, path: &std::path::Path) -> std::io::Result<()> {
         let normal_tabs: Vec<SavedSessionTab> = self
             .tabs
             .iter()
-            .filter(|t| !t.is_incognito && !t.url.is_empty() && t.url != "about:blank")
+            .filter(|t| {
+                !t.is_incognito
+                    && t.profile_id != "guest"
+                    && t.profile_id != "high-security"
+                    && !t.url.is_empty()
+                    && t.url != "about:blank"
+            })
             .map(|t| SavedSessionTab {
                 url: t.url.clone(),
                 title: t.title.clone(),
                 is_pinned: t.is_pinned,
+                profile_id: t.profile_id.clone(),
             })
             .collect();
 
@@ -387,7 +432,7 @@ impl TabManager {
 
         let count = saved_tabs.len();
         for saved in saved_tabs {
-            let mut tab = Tab::new(false);
+            let mut tab = Tab::new_with_profile(false, &saved.profile_id);
             tab.url = saved.url.clone();
             tab.title = saved.title;
             tab.is_pinned = saved.is_pinned;
@@ -527,6 +572,48 @@ mod tests {
         assert_eq!(restored, 1);
         assert_eq!(fresh_mgr.tabs().len(), 1);
         assert_eq!(fresh_mgr.tabs()[0].url, "https://normal-tab.org");
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tab_profiles_isolation_and_session_persistence() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("vingilot_test_prof_{}", uuid::Uuid::new_v4()));
+        let session_file = temp_dir.join("session.json");
+
+        let mut mgr = TabManager::new();
+        // Standard tab
+        mgr.active_tab_mut().unwrap().url = "https://standard.org".to_string();
+        assert_eq!(mgr.tabs()[0].profile_id, "standard");
+
+        // Guest tab
+        let _guest_id = mgr.new_tab_for_profile("guest");
+        mgr.active_tab_mut().unwrap().url = "https://ephemeral-guest.org".to_string();
+
+        // High security tab
+        let _hs_id = mgr.new_tab_for_profile("high-security");
+        mgr.active_tab_mut().unwrap().url = "https://classified.onion".to_string();
+
+        // Custom profile tab
+        let _work_id = mgr.new_tab_for_profile("work");
+        mgr.active_tab_mut().unwrap().url = "https://work-portal.internal".to_string();
+
+        assert_eq!(mgr.tabs().len(), 4);
+
+        // Save session
+        mgr.save_session(&session_file).unwrap();
+
+        // Verify JSON contents: standard and work should be saved, guest and high-security must NOT
+        let content = std::fs::read_to_string(&session_file).unwrap();
+        assert!(content.contains("https://standard.org"));
+        assert!(content.contains("https://work-portal.internal"));
+        assert!(!content.contains("https://ephemeral-guest.org"));
+        assert!(!content.contains("https://classified.onion"));
+
+        // Close guest tab: should NOT be placed in closed_tabs history
+        mgr.close_tab(1);
+        assert!(!mgr.closed_tabs().iter().any(|c| c.url.contains("guest")));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
