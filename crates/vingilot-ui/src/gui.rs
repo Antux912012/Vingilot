@@ -227,6 +227,9 @@ struct GtkBindings {
     gtk_stack_add_named: unsafe extern "C" fn(*mut c_void, *mut c_void, *const c_char),
     gtk_stack_set_visible_child_name: unsafe extern "C" fn(*mut c_void, *const c_char),
     gtk_stack_get_visible_child_name: unsafe extern "C" fn(*mut c_void) -> *const c_char,
+    gtk_overlay_new: unsafe extern "C" fn() -> *mut c_void,
+    gtk_overlay_set_child: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_overlay_add_overlay: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_flow_box_new: unsafe extern "C" fn() -> *mut c_void,
     gtk_flow_box_append: unsafe extern "C" fn(*mut c_void, *mut c_void),
     gtk_flow_box_remove: unsafe extern "C" fn(*mut c_void, *mut c_void),
@@ -332,6 +335,10 @@ struct GtkBindings {
         Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> libc::c_int>,
     jsc_value_to_string: Option<unsafe extern "C" fn(*mut c_void) -> *mut c_char>,
     g_free: Option<unsafe extern "C" fn(*mut c_void)>,
+    webkit_network_session_get_website_data_manager:
+        Option<unsafe extern "C" fn(*mut c_void) -> *mut c_void>,
+    webkit_website_data_manager_set_favicons_enabled:
+        Option<unsafe extern "C" fn(*mut c_void, libc::c_int)>,
 
     // GObject / GIO
     g_object_new: unsafe extern "C" fn(
@@ -551,6 +558,9 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         gtk_stack_add_named: load_symbol(libgtk, "gtk_stack_add_named")?,
         gtk_stack_set_visible_child_name: load_symbol(libgtk, "gtk_stack_set_visible_child_name")?,
         gtk_stack_get_visible_child_name: load_symbol(libgtk, "gtk_stack_get_visible_child_name")?,
+        gtk_overlay_new: load_symbol(libgtk, "gtk_overlay_new")?,
+        gtk_overlay_set_child: load_symbol(libgtk, "gtk_overlay_set_child")?,
+        gtk_overlay_add_overlay: load_symbol(libgtk, "gtk_overlay_add_overlay")?,
         gtk_flow_box_new: load_symbol(libgtk, "gtk_flow_box_new")?,
         gtk_flow_box_append: load_symbol(libgtk, "gtk_flow_box_append")?,
         gtk_flow_box_remove: load_symbol(libgtk, "gtk_flow_box_remove")?,
@@ -729,6 +739,14 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         ),
         jsc_value_to_string: load_symbol(libwebkit, "jsc_value_to_string"),
         g_free: load_symbol(libglib, "g_free"),
+        webkit_network_session_get_website_data_manager: load_symbol(
+            libwebkit,
+            "webkit_network_session_get_website_data_manager",
+        ),
+        webkit_website_data_manager_set_favicons_enabled: load_symbol(
+            libwebkit,
+            "webkit_website_data_manager_set_favicons_enabled",
+        ),
 
         g_object_new: load_symbol(libgobj, "g_object_new")?,
         g_simple_action_new: load_symbol(libgio, "g_simple_action_new")?,
@@ -3166,14 +3184,48 @@ unsafe extern "C" fn on_webview_favicon_notify(
     };
     let favicon = (b.webkit_web_view_get_favicon)(webview);
     if !favicon.is_null() {
+        let mut changed = false;
         if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
             if let Some(mgr) = mgr_guard.as_mut() {
                 if let Some(active) = mgr.active_tab_mut() {
-                    active.favicon_ptr = favicon as usize;
+                    if active.favicon_ptr != favicon as usize {
+                        active.favicon_ptr = favicon as usize;
+                        changed = true;
+                    }
                 }
             }
         }
-        refresh_sidebar_tabs();
+        if changed {
+            refresh_sidebar_tabs();
+        }
+    }
+}
+
+unsafe extern "C" fn on_webview_load_changed(
+    webview: *mut c_void,
+    _load_event: libc::c_int,
+    _user_data: *mut c_void,
+) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let favicon = (b.webkit_web_view_get_favicon)(webview);
+    if !favicon.is_null() {
+        let mut changed = false;
+        if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+            if let Some(mgr) = mgr_guard.as_mut() {
+                if let Some(active) = mgr.active_tab_mut() {
+                    if active.favicon_ptr != favicon as usize {
+                        active.favicon_ptr = favicon as usize;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if changed {
+            refresh_sidebar_tabs();
+        }
     }
 }
 
@@ -3527,14 +3579,19 @@ unsafe fn refresh_sidebar_tabs() {
 
     if let Some(mgr) = tab_manager_guard.as_ref() {
         let active_idx = mgr.active_index();
-        let total = mgr.tabs().len();
+        let _total = mgr.tabs().len();
 
         for (idx, tab) in mgr.tabs().iter().enumerate() {
             let is_active = idx == active_idx;
 
+            let is_internal_start = tab.is_start_page
+                || tab.url == "about:blank"
+                || tab.url == "browser://start"
+                || tab.url.starts_with("vingilot://");
+
             // Favicon image
-            let img = if tab.is_start_page {
-                let c_home = CString::new("go-home-symbolic").unwrap();
+            let img = if is_internal_start {
+                let c_home = CString::new("user-home-symbolic").unwrap();
                 (b.gtk_image_new_from_icon_name)(c_home.as_ptr())
             } else if tab.favicon_ptr != 0 {
                 (b.gtk_image_new_from_paintable)(tab.favicon_ptr as *mut c_void)
@@ -3542,12 +3599,12 @@ unsafe fn refresh_sidebar_tabs() {
                 let fallback = if tab.is_incognito {
                     "weather-clear-night-symbolic"
                 } else {
-                    "globe-symbolic"
+                    "applications-internet-symbolic"
                 };
                 let c_fallback = CString::new(fallback).unwrap();
                 (b.gtk_image_new_from_icon_name)(c_fallback.as_ptr())
             };
-            (b.gtk_image_set_pixel_size)(img, 18);
+            (b.gtk_image_set_pixel_size)(img, 16);
 
             // Drag gesture for moving tab with mouse across the separator or reordering
             let drag_gesture = (b.gtk_gesture_drag_new)();
@@ -3609,10 +3666,38 @@ unsafe fn refresh_sidebar_tabs() {
                 );
                 (b.gtk_widget_add_controller)(tab_btn, rc_gesture);
 
+                // Zen-style top-left close badge overlay
+                let tab_overlay = (b.gtk_overlay_new)();
+                let class_overlay = CString::new("tab-overlay-container").unwrap();
+                (b.gtk_widget_add_css_class)(tab_overlay, class_overlay.as_ptr());
+                (b.gtk_overlay_set_child)(tab_overlay, tab_btn);
+
+                if !tab.is_pinned {
+                    let close_badge = (b.gtk_button_new_from_icon_name)(
+                        CString::new("window-close-symbolic").unwrap().as_ptr(),
+                    );
+                    (b.gtk_button_set_has_frame)(close_badge, 0);
+                    let class_badge = CString::new("zen-tab-close-badge").unwrap();
+                    (b.gtk_widget_add_css_class)(close_badge, class_badge.as_ptr());
+                    (b.gtk_widget_set_halign)(close_badge, 1); // GTK_ALIGN_START
+                    (b.gtk_widget_set_valign)(close_badge, 1); // GTK_ALIGN_START
+                    let close_tip = CString::new("Close Tab").unwrap();
+                    (b.gtk_widget_set_tooltip_text)(close_badge, close_tip.as_ptr());
+                    (b.g_signal_connect_data)(
+                        close_badge,
+                        clicked_sig.as_ptr(),
+                        cb_close,
+                        idx as *mut c_void,
+                        std::ptr::null_mut(),
+                        0,
+                    );
+                    (b.gtk_overlay_add_overlay)(tab_overlay, close_badge);
+                }
+
                 if tab.is_pinned {
-                    (b.gtk_box_append)(pinned_box, tab_btn);
+                    (b.gtk_box_append)(pinned_box, tab_overlay);
                 } else {
-                    (b.gtk_box_append)(normal_box, tab_btn);
+                    (b.gtk_box_append)(normal_box, tab_overlay);
                 }
             } else {
                 // Expanded mode: favicon + title + action buttons
@@ -3692,26 +3777,40 @@ unsafe fn refresh_sidebar_tabs() {
                         0,
                     );
                     (b.gtk_box_append)(row_box, btn_unpin);
-                    (b.gtk_box_append)(pinned_box, row_box);
+                }
+
+                // Zen-style top-left close badge overlay
+                let tab_overlay = (b.gtk_overlay_new)();
+                let class_overlay = CString::new("tab-overlay-container").unwrap();
+                (b.gtk_widget_add_css_class)(tab_overlay, class_overlay.as_ptr());
+                (b.gtk_overlay_set_child)(tab_overlay, row_box);
+
+                if !tab.is_pinned {
+                    let close_badge = (b.gtk_button_new_from_icon_name)(
+                        CString::new("window-close-symbolic").unwrap().as_ptr(),
+                    );
+                    (b.gtk_button_set_has_frame)(close_badge, 0);
+                    let class_badge = CString::new("zen-tab-close-badge").unwrap();
+                    (b.gtk_widget_add_css_class)(close_badge, class_badge.as_ptr());
+                    (b.gtk_widget_set_halign)(close_badge, 1); // GTK_ALIGN_START
+                    (b.gtk_widget_set_valign)(close_badge, 1); // GTK_ALIGN_START
+                    let close_tip = CString::new("Close Tab").unwrap();
+                    (b.gtk_widget_set_tooltip_text)(close_badge, close_tip.as_ptr());
+                    (b.g_signal_connect_data)(
+                        close_badge,
+                        clicked_sig.as_ptr(),
+                        cb_close,
+                        idx as *mut c_void,
+                        std::ptr::null_mut(),
+                        0,
+                    );
+                    (b.gtk_overlay_add_overlay)(tab_overlay, close_badge);
+                }
+
+                if tab.is_pinned {
+                    (b.gtk_box_append)(pinned_box, tab_overlay);
                 } else {
-                    // Normal tab: Close button (if > 1 tab)
-                    if total > 1 {
-                        let close_icon = CString::new("window-close-symbolic").unwrap();
-                        let btn_close = (b.gtk_button_new_from_icon_name)(close_icon.as_ptr());
-                        (b.gtk_button_set_has_frame)(btn_close, 0);
-                        let close_tip = CString::new("Close Tab").unwrap();
-                        (b.gtk_widget_set_tooltip_text)(btn_close, close_tip.as_ptr());
-                        (b.g_signal_connect_data)(
-                            btn_close,
-                            clicked_sig.as_ptr(),
-                            cb_close,
-                            idx as *mut c_void,
-                            std::ptr::null_mut(),
-                            0,
-                        );
-                        (b.gtk_box_append)(row_box, btn_close);
-                    }
-                    (b.gtk_box_append)(normal_box, row_box);
+                    (b.gtk_box_append)(normal_box, tab_overlay);
                 }
             }
         }
@@ -6097,6 +6196,20 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     };
     ACTIVE_NETWORK_SESSION.store(network_session, Ordering::SeqCst);
 
+    // Enable WebKitGTK Favicon Database on WebsiteDataManager
+    let favicon_cache_dir = default_data_dir().join("favicons");
+    let _ = std::fs::create_dir_all(&favicon_cache_dir);
+    if let (Some(get_dm), Some(set_fav_enabled)) = (
+        b.webkit_network_session_get_website_data_manager,
+        b.webkit_website_data_manager_set_favicons_enabled,
+    ) {
+        let dm = get_dm(network_session);
+        if !dm.is_null() {
+            set_fav_enabled(dm, 1);
+            println!("[Vingilot] Favicon database enabled on WebKitWebsiteDataManager");
+        }
+    }
+
     let webview = if is_incognito {
         let prop = CString::new("network-session").unwrap();
         (b.g_object_new)(
@@ -6623,6 +6736,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let notify_active_sig = CString::new("notify::active").unwrap();
     let notify_pos_sig = CString::new("notify::position").unwrap();
     let notify_fav_sig = CString::new("notify::favicon").unwrap();
+    let load_changed_sig = CString::new("load-changed").unwrap();
     let notify_title_sig = CString::new("notify::title").unwrap();
     let notify_uri_sig = CString::new("notify::uri").unwrap();
 
@@ -6637,6 +6751,10 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
         GCallback,
     >(on_webview_favicon_notify);
+    let cb_load_changed = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, libc::c_int, *mut c_void),
+        GCallback,
+    >(on_webview_load_changed);
     let cb_title_notify = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
         GCallback,
@@ -6915,6 +7033,14 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         webview,
         notify_fav_sig.as_ptr(),
         cb_fav_notify,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        webview,
+        load_changed_sig.as_ptr(),
+        cb_load_changed,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,

@@ -109,9 +109,9 @@ pub fn base_css() -> &'static str {
     }
 
     /* Tab and sidebar action buttons matching top bar appearance */
-    .sidebar button {
+    .sidebar button:not(.zen-tab-close-badge) {
         border-radius: 8px;
-        margin: 2px 4px;
+        margin: 0;
         padding: 0;
         min-height: 36px;
         background: transparent;
@@ -119,11 +119,11 @@ pub fn base_css() -> &'static str {
         transition: background-color 150ms ease, color 150ms ease;
     }
 
-    .sidebar button:hover {
+    .sidebar button:not(.zen-tab-close-badge):hover {
         background-color: alpha(currentColor, 0.08);
     }
 
-    .sidebar button:active {
+    .sidebar button:not(.zen-tab-close-badge):active {
         background-color: alpha(currentColor, 0.14);
     }
 
@@ -135,6 +135,39 @@ pub fn base_css() -> &'static str {
 
     .sidebar button.suggested-action:hover {
         background-color: alpha(@accent_color, 0.32);
+    }
+
+    .tab-overlay-container {
+        margin: 2px 4px;
+    }
+
+    .zen-tab-close-badge {
+        opacity: 0;
+        min-width: 16px;
+        min-height: 16px;
+        padding: 1px;
+        margin-top: -3px;
+        margin-left: -3px;
+        border-radius: 9999px;
+        background-color: #3a3d42;
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        transition: opacity 140ms ease, transform 140ms ease, background-color 140ms ease;
+    }
+
+    .zen-tab-close-badge image {
+        -gtk-icon-size: 10px;
+    }
+
+    /* Show the top-left close badge when hovering anywhere over the tab overlay */
+    .tab-overlay-container:hover .zen-tab-close-badge {
+        opacity: 1;
+    }
+
+    .zen-tab-close-badge:hover {
+        background-color: #e01b24;
+        color: #ffffff;
     }
 
     /* Horizontal separator inside sidebar dividing pinned and normal tabs */
@@ -432,5 +465,14 @@ mod tests {
         let css = incognito_css();
         assert!(css.contains("#062640"));
         assert!(css.contains("#ffc95c"));
+    }
+
+    #[test]
+    fn test_zen_close_badge_css() {
+        let css = base_css();
+        assert!(css.contains(".tab-overlay-container"));
+        assert!(css.contains(".zen-tab-close-badge"));
+        assert!(css.contains(".tab-overlay-container:hover .zen-tab-close-badge"));
+        assert!(css.contains("opacity: 1"));
     }
 }
