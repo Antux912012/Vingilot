@@ -60,6 +60,26 @@ pub fn base_css() -> &'static str {
         background-color: @headerbar_bg_color;
     }
 
+    popover,
+    popover.background {
+        background: transparent;
+        background-color: transparent;
+        border: none;
+        box-shadow: none;
+    }
+    popover > contents {
+        background-color: @popover_bg_color;
+        color: @popover_fg_color;
+        border-radius: 12px;
+        padding: 12px;
+        border: 1px solid alpha(white, 0.08);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    }
+    popover > arrow {
+        background-color: @popover_bg_color;
+        border: 1px solid alpha(white, 0.08);
+    }
+
     headerbar {
         background-color: @headerbar_bg_color;
         border-bottom: none;

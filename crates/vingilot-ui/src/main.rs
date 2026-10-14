@@ -32,6 +32,9 @@ pub use theme::{AppTheme, ThemeManager};
 pub use window::VingilotWindow;
 
 fn main() {
+    if std::env::var("GSK_RENDERER").is_err() {
+        std::env::set_var("GSK_RENDERER", "gl");
+    }
     println!("Launching Project Vingilot (Libadwaita / WebKitGTK)");
     let args: Vec<String> = std::env::args().collect();
     let is_incognito = args.iter().any(|arg| arg == "--incognito" || arg == "-i");

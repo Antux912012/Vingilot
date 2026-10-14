@@ -328,6 +328,10 @@ struct GtkBindings {
     webkit_uri_response_get_suggested_filename: unsafe extern "C" fn(*mut c_void) -> *const c_char,
     webkit_permission_request_allow: unsafe extern "C" fn(*mut c_void),
     webkit_permission_request_deny: unsafe extern "C" fn(*mut c_void),
+    webkit_user_content_manager_register_script_message_handler:
+        Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char) -> libc::c_int>,
+    jsc_value_to_string: Option<unsafe extern "C" fn(*mut c_void) -> *mut c_char>,
+    g_free: Option<unsafe extern "C" fn(*mut c_void)>,
 
     // GObject / GIO
     g_object_new: unsafe extern "C" fn(
@@ -719,6 +723,12 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         )?,
         webkit_permission_request_allow: load_symbol(libwebkit, "webkit_permission_request_allow")?,
         webkit_permission_request_deny: load_symbol(libwebkit, "webkit_permission_request_deny")?,
+        webkit_user_content_manager_register_script_message_handler: load_symbol(
+            libwebkit,
+            "webkit_user_content_manager_register_script_message_handler",
+        ),
+        jsc_value_to_string: load_symbol(libwebkit, "jsc_value_to_string"),
+        g_free: load_symbol(libglib, "g_free"),
 
         g_object_new: load_symbol(libgobj, "g_object_new")?,
         g_simple_action_new: load_symbol(libgio, "g_simple_action_new")?,
@@ -3565,9 +3575,16 @@ unsafe fn refresh_sidebar_tabs() {
                 (b.gtk_widget_set_size_request)(tab_btn, 38, 38);
                 (b.gtk_widget_set_tooltip_text)(tab_btn, c_tip.as_ptr());
 
+                let class_tab_row = CString::new("tab-row").unwrap();
+                let class_sidebar_tab = CString::new("sidebar-tab").unwrap();
+                (b.gtk_widget_add_css_class)(tab_btn, class_tab_row.as_ptr());
+                (b.gtk_widget_add_css_class)(tab_btn, class_sidebar_tab.as_ptr());
+
                 if is_active {
                     let active_class = CString::new("suggested-action").unwrap();
                     (b.gtk_widget_add_css_class)(tab_btn, active_class.as_ptr());
+                    let class_active = CString::new("active").unwrap();
+                    (b.gtk_widget_add_css_class)(tab_btn, class_active.as_ptr());
                 }
 
                 (b.g_signal_connect_data)(
@@ -3623,9 +3640,16 @@ unsafe fn refresh_sidebar_tabs() {
                 (b.gtk_button_set_child)(tab_btn, inner);
                 (b.gtk_widget_set_tooltip_text)(tab_btn, c_tip.as_ptr());
 
+                let class_tab_row = CString::new("tab-row").unwrap();
+                let class_sidebar_tab = CString::new("sidebar-tab").unwrap();
+                (b.gtk_widget_add_css_class)(tab_btn, class_tab_row.as_ptr());
+                (b.gtk_widget_add_css_class)(tab_btn, class_sidebar_tab.as_ptr());
+
                 if is_active {
                     let active_class = CString::new("suggested-action").unwrap();
                     (b.gtk_widget_add_css_class)(tab_btn, active_class.as_ptr());
+                    let class_active = CString::new("active").unwrap();
+                    (b.gtk_widget_add_css_class)(tab_btn, class_active.as_ptr());
                 }
 
                 (b.g_signal_connect_data)(
@@ -5314,20 +5338,49 @@ const GNOME_ACCENTS: &[(&str, &str, &str)] = &[
     ("Slate", "#6f8396", "radial-gradient(ellipse at 50% -10%, rgba(111, 131, 150, 0.35) 0%, rgba(111, 131, 150, 0.10) 45%, transparent 75%)"),
 ];
 
-unsafe fn apply_start_page_accent(name: &str) {
+unsafe extern "C" fn on_script_message_accent_changed(
+    _manager: *mut c_void,
+    js_value: *mut c_void,
+    _user_data: *mut c_void,
+) {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let bg = GNOME_ACCENTS
+    if let Some(jsc_to_string) = b.jsc_value_to_string {
+        if !js_value.is_null() {
+            let c_str = jsc_to_string(js_value);
+            if !c_str.is_null() {
+                if let Ok(color_str) = CStr::from_ptr(c_str).to_str() {
+                    let color = color_str.trim().to_string();
+                    apply_accent_color(&color);
+                }
+                if let Some(gfree) = b.g_free {
+                    gfree(c_str as *mut c_void);
+                }
+            }
+        }
+    }
+}
+
+pub unsafe fn apply_accent_color(hex_or_name: &str) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let (name, hex, bg) = if let Some(found) = GNOME_ACCENTS
         .iter()
-        .find(|(n, _, _)| n.eq_ignore_ascii_case(name))
-        .map(|(_, _, bg)| *bg)
-        .unwrap_or("none");
+        .find(|(n, h, _)| n.eq_ignore_ascii_case(hex_or_name) || h.eq_ignore_ascii_case(hex_or_name))
+    {
+        *found
+    } else {
+        (hex_or_name, hex_or_name, "none")
+    };
 
     let css = format!(
-        ".start-page-container {{ background: {}; }}\n.start-page-scrolled {{ background: transparent; }}",
-        bg
+        ".browser-chrome {{\n    background-image: linear-gradient(135deg, alpha({hex}, 0.22), alpha({hex}, 0.08));\n    transition: background-image 200ms ease;\n}}\n.tab-row.active, .sidebar-tab.active, .sidebar-tab.suggested-action, button.suggested-action {{\n    background-color: alpha({hex}, 0.28);\n}}\n.start-page-container {{\n    background: {bg};\n}}\n.start-page-scrolled {{\n    background: transparent;\n}}",
+        hex = hex,
+        bg = bg
     );
 
     let display = (b.gdk_display_get_default)();
@@ -5336,7 +5389,7 @@ unsafe fn apply_start_page_accent(name: &str) {
         if provider.is_null() {
             provider = (b.gtk_css_provider_new)();
             ACCENT_CSS_PROVIDER.store(provider, Ordering::SeqCst);
-            (b.gtk_style_context_add_provider_for_display)(display, provider, 800);
+            (b.gtk_style_context_add_provider_for_display)(display, provider, 601);
         }
         if let Ok(c_css) = CString::new(css) {
             (b.gtk_css_provider_load_from_string)(provider, c_css.as_ptr());
@@ -5345,6 +5398,10 @@ unsafe fn apply_start_page_accent(name: &str) {
 
     let path = default_data_dir().join("start_page_accent.txt");
     let _ = std::fs::write(path, name);
+}
+
+unsafe fn apply_start_page_accent(name: &str) {
+    apply_accent_color(name);
 }
 
 fn load_saved_accent() -> String {
@@ -5357,8 +5414,8 @@ fn load_saved_accent() -> String {
 
 unsafe extern "C" fn on_accent_button_clicked(_button: *mut c_void, user_data: *mut c_void) {
     let idx = user_data as usize;
-    if let Some((name, _, _)) = GNOME_ACCENTS.get(idx) {
-        apply_start_page_accent(name);
+    if let Some((_name, hex, _)) = GNOME_ACCENTS.get(idx) {
+        apply_accent_color(hex);
     }
 }
 
@@ -5672,6 +5729,16 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
                 );
             }
         }
+        let mut accent_provider = ACCENT_CSS_PROVIDER.load(Ordering::SeqCst);
+        if accent_provider.is_null() {
+            accent_provider = (b.gtk_css_provider_new)();
+            ACCENT_CSS_PROVIDER.store(accent_provider, Ordering::SeqCst);
+            (b.gtk_style_context_add_provider_for_display)(
+                display,
+                accent_provider,
+                601, // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+            );
+        }
     }
 
     if is_incognito {
@@ -5680,6 +5747,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 
     // Header bar
     let header = (b.adw_header_bar_new)();
+    let class_browser_chrome = CString::new("browser-chrome").unwrap();
+    (b.gtk_widget_add_css_class)(header, class_browser_chrome.as_ptr());
 
     let (btn_sidebar, _header_sep, btn_back, btn_fwd, btn_refresh) = if is_incognito {
         // In incognito mode, suppress window title buttons at start if any
@@ -6043,6 +6112,29 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_vexpand)(webview, 1);
     (b.gtk_widget_set_hexpand)(webview, 1);
 
+    // Register WebKit script message handler for accentChanged
+    let user_content_mgr = (b.webkit_web_view_get_user_content_manager)(webview);
+    if !user_content_mgr.is_null() {
+        let sig_accent = CString::new("script-message-received::accentChanged").unwrap();
+        let cb_accent_msg = std::mem::transmute::<
+            unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+            GCallback,
+        >(on_script_message_accent_changed);
+        (b.g_signal_connect_data)(
+            user_content_mgr,
+            sig_accent.as_ptr(),
+            cb_accent_msg,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+
+        if let Some(register_handler) = b.webkit_user_content_manager_register_script_message_handler {
+            let handler_name = CString::new("accentChanged").unwrap();
+            register_handler(user_content_mgr, handler_name.as_ptr(), std::ptr::null());
+        }
+    }
+
     if !is_initial_start_page {
         if let Ok(c_start_url) = CString::new(start_url) {
             (b.webkit_web_view_load_uri)(webview, c_start_url.as_ptr());
@@ -6211,6 +6303,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_widget_set_size_request)(sidebar_box, MIN_COLLAPSED_SIDEBAR_WIDTH, -1);
     let sidebar_class = CString::new("sidebar").unwrap();
     (b.gtk_widget_add_css_class)(sidebar_box, sidebar_class.as_ptr());
+    let class_browser_chrome = CString::new("browser-chrome").unwrap();
+    (b.gtk_widget_add_css_class)(sidebar_box, class_browser_chrome.as_ptr());
 
     // Sidebar scrolling container
     let scroller = (b.gtk_scrolled_window_new)();
@@ -6934,6 +7028,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 }
 
 pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
+    if std::env::var("GSK_RENDERER").is_err() {
+        std::env::set_var("GSK_RENDERER", "gl");
+    }
     let has_display = std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
     if !has_display {
         println!("No graphical display found (DISPLAY and WAYLAND_DISPLAY are unset).");

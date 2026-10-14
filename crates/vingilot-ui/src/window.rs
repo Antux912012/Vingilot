@@ -12,6 +12,7 @@ pub struct VingilotWindow {
     layout: AdaptiveLayoutManager,
     address_input: String,
     default_search_url: String,
+    accent_color: Option<String>,
 }
 
 impl Default for VingilotWindow {
@@ -31,6 +32,7 @@ impl VingilotWindow {
             layout: AdaptiveLayoutManager::new(1024, 768),
             address_input: String::new(),
             default_search_url: "https://duckduckgo.com/?q=%s".to_string(),
+            accent_color: None,
         }
     }
 
@@ -76,6 +78,19 @@ impl VingilotWindow {
 
     pub fn set_default_search_url(&mut self, url: &str) {
         self.default_search_url = url.to_string();
+    }
+
+    pub fn accent_color(&self) -> Option<&str> {
+        self.accent_color.as_deref()
+    }
+
+    /// Applies an accent color to window chrome and sidebar, returning the corresponding CSS.
+    pub fn apply_accent_color(&mut self, hex_color: &str) -> String {
+        self.accent_color = Some(hex_color.to_string());
+        format!(
+            ".browser-chrome {{\n    background-image: linear-gradient(135deg, alpha({}, 0.22), alpha({}, 0.08));\n    transition: background-image 200ms ease;\n}}\n.tab-row.active, .sidebar-tab.active {{\n    background-color: alpha({}, 0.28);\n}}",
+            hex_color, hex_color, hex_color
+        )
     }
 
     /// Triggers navigation in the active tab from address bar entry or search query.
@@ -219,5 +234,16 @@ mod tests {
 
         win.on_window_resized(1200, 800);
         assert!(!win.sidebar().is_collapsed);
+    }
+
+    #[test]
+    fn test_window_apply_accent_color() {
+        let mut win = VingilotWindow::default();
+        assert_eq!(win.accent_color(), None);
+        let css = win.apply_accent_color("#3584e4");
+        assert_eq!(win.accent_color(), Some("#3584e4"));
+        assert!(css.contains(".browser-chrome"));
+        assert!(css.contains("alpha(#3584e4, 0.22)"));
+        assert!(css.contains(".tab-row.active, .sidebar-tab.active"));
     }
 }
