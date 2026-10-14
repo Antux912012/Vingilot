@@ -277,6 +277,8 @@ struct GtkBindings {
         *mut c_void,
     ),
     webkit_web_view_get_type: unsafe extern "C" fn() -> libc::size_t,
+    webkit_web_view_get_settings: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    webkit_settings_set_enable_developer_extras: unsafe extern "C" fn(*mut c_void, libc::c_int),
     webkit_web_view_stop_loading: unsafe extern "C" fn(*mut c_void),
     webkit_web_view_is_loading: unsafe extern "C" fn(*mut c_void) -> libc::c_int,
     webkit_web_view_get_estimated_load_progress:
@@ -300,6 +302,7 @@ struct GtkBindings {
     webkit_hit_test_result_get_image_uri: unsafe extern "C" fn(*mut c_void) -> *const c_char,
     webkit_context_menu_remove_all: unsafe extern "C" fn(*mut c_void),
     webkit_context_menu_append: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    webkit_context_menu_prepend: unsafe extern "C" fn(*mut c_void, *mut c_void),
     webkit_context_menu_item_new_from_stock_action:
         unsafe extern "C" fn(libc::c_int) -> *mut c_void,
     webkit_context_menu_item_new_from_stock_action_with_label:
@@ -615,6 +618,11 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
             "webkit_web_view_evaluate_javascript",
         )?,
         webkit_web_view_get_type: load_symbol(libwebkit, "webkit_web_view_get_type")?,
+        webkit_web_view_get_settings: load_symbol(libwebkit, "webkit_web_view_get_settings")?,
+        webkit_settings_set_enable_developer_extras: load_symbol(
+            libwebkit,
+            "webkit_settings_set_enable_developer_extras",
+        )?,
         webkit_web_view_stop_loading: load_symbol(libwebkit, "webkit_web_view_stop_loading")?,
         webkit_web_view_is_loading: load_symbol(libwebkit, "webkit_web_view_is_loading")?,
         webkit_web_view_get_estimated_load_progress: load_symbol(
@@ -674,6 +682,7 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         )?,
         webkit_context_menu_remove_all: load_symbol(libwebkit, "webkit_context_menu_remove_all")?,
         webkit_context_menu_append: load_symbol(libwebkit, "webkit_context_menu_append")?,
+        webkit_context_menu_prepend: load_symbol(libwebkit, "webkit_context_menu_prepend")?,
         webkit_context_menu_item_new_from_stock_action: load_symbol(
             libwebkit,
             "webkit_context_menu_item_new_from_stock_action",
@@ -1049,9 +1058,7 @@ unsafe extern "C" fn on_webview_context_menu(
     let is_link = (b.webkit_hit_test_result_context_is_link)(hit_test_result) != 0;
     let is_image = (b.webkit_hit_test_result_context_is_image)(hit_test_result) != 0;
     let is_selection = (b.webkit_hit_test_result_context_is_selection)(hit_test_result) != 0;
-    let is_editable = (b.webkit_hit_test_result_context_is_editable)(hit_test_result) != 0;
 
-    (b.webkit_context_menu_remove_all)(context_menu);
     let activate_sig = CString::new("activate").unwrap();
 
     if is_link {
@@ -1084,7 +1091,6 @@ unsafe extern "C" fn on_webview_context_menu(
             CString::new("Open Link in New Tab").unwrap().as_ptr(),
             std::ptr::null_mut(),
         );
-        (b.webkit_context_menu_append)(context_menu, item_new_tab);
 
         let act_incog = (b.g_simple_action_new)(
             CString::new("open-link-incognito").unwrap().as_ptr(),
@@ -1109,16 +1115,9 @@ unsafe extern "C" fn on_webview_context_menu(
                 .as_ptr(),
             std::ptr::null_mut(),
         );
-        (b.webkit_context_menu_append)(context_menu, item_incog);
 
-        let item_copy_link = (b.webkit_context_menu_item_new_from_stock_action)(4); // WEBKIT_CONTEXT_MENU_ACTION_COPY_LINK_TO_CLIPBOARD
-        (b.webkit_context_menu_append)(context_menu, item_copy_link);
-
-        let item_dl = (b.webkit_context_menu_item_new_from_stock_action)(3); // WEBKIT_CONTEXT_MENU_ACTION_DOWNLOAD_LINK_TO_DISK
-        (b.webkit_context_menu_append)(context_menu, item_dl);
-
-        let sep = (b.webkit_context_menu_item_new_separator)();
-        (b.webkit_context_menu_append)(context_menu, sep);
+        (b.webkit_context_menu_prepend)(context_menu, item_incog);
+        (b.webkit_context_menu_prepend)(context_menu, item_new_tab);
     }
 
     if is_image {
@@ -1151,25 +1150,10 @@ unsafe extern "C" fn on_webview_context_menu(
             CString::new("Open Image in New Tab").unwrap().as_ptr(),
             std::ptr::null_mut(),
         );
-        (b.webkit_context_menu_append)(context_menu, item_img_tab);
-
-        let item_save_img = (b.webkit_context_menu_item_new_from_stock_action)(6); // WEBKIT_CONTEXT_MENU_ACTION_DOWNLOAD_IMAGE_TO_DISK
-        (b.webkit_context_menu_append)(context_menu, item_save_img);
-
-        let item_copy_img_url = (b.webkit_context_menu_item_new_from_stock_action)(8); // WEBKIT_CONTEXT_MENU_ACTION_COPY_IMAGE_URL_TO_CLIPBOARD
-        (b.webkit_context_menu_append)(context_menu, item_copy_img_url);
-
-        let item_copy_img = (b.webkit_context_menu_item_new_from_stock_action)(7); // WEBKIT_CONTEXT_MENU_ACTION_COPY_IMAGE_TO_CLIPBOARD
-        (b.webkit_context_menu_append)(context_menu, item_copy_img);
-
-        let sep = (b.webkit_context_menu_item_new_separator)();
-        (b.webkit_context_menu_append)(context_menu, sep);
+        (b.webkit_context_menu_prepend)(context_menu, item_img_tab);
     }
 
     if is_selection {
-        let item_copy = (b.webkit_context_menu_item_new_from_stock_action)(14); // WEBKIT_CONTEXT_MENU_ACTION_COPY
-        (b.webkit_context_menu_append)(context_menu, item_copy);
-
         let act_search = (b.g_simple_action_new)(
             CString::new("search-sel").unwrap().as_ptr(),
             std::ptr::null_mut(),
@@ -1194,35 +1178,6 @@ unsafe extern "C" fn on_webview_context_menu(
             std::ptr::null_mut(),
         );
         (b.webkit_context_menu_append)(context_menu, item_search);
-
-        let sep = (b.webkit_context_menu_item_new_separator)();
-        (b.webkit_context_menu_append)(context_menu, sep);
-    }
-
-    if is_editable {
-        let item_cut = (b.webkit_context_menu_item_new_from_stock_action)(15);
-        let item_copy = (b.webkit_context_menu_item_new_from_stock_action)(14);
-        let item_paste = (b.webkit_context_menu_item_new_from_stock_action)(16);
-        let item_sel_all = (b.webkit_context_menu_item_new_from_stock_action)(18);
-        (b.webkit_context_menu_append)(context_menu, item_cut);
-        (b.webkit_context_menu_append)(context_menu, item_copy);
-        (b.webkit_context_menu_append)(context_menu, item_paste);
-        (b.webkit_context_menu_append)(context_menu, item_sel_all);
-        let sep = (b.webkit_context_menu_item_new_separator)();
-        (b.webkit_context_menu_append)(context_menu, sep);
-    }
-
-    if !is_link && !is_image {
-        let item_back = (b.webkit_context_menu_item_new_from_stock_action)(10);
-        let item_fwd = (b.webkit_context_menu_item_new_from_stock_action)(11);
-        let item_reload = (b.webkit_context_menu_item_new_from_stock_action)(13);
-        let sep = (b.webkit_context_menu_item_new_separator)();
-        let item_sel_all = (b.webkit_context_menu_item_new_from_stock_action)(18);
-        (b.webkit_context_menu_append)(context_menu, item_back);
-        (b.webkit_context_menu_append)(context_menu, item_fwd);
-        (b.webkit_context_menu_append)(context_menu, item_reload);
-        (b.webkit_context_menu_append)(context_menu, sep);
-        (b.webkit_context_menu_append)(context_menu, item_sel_all);
     }
 
     0
@@ -1740,11 +1695,25 @@ unsafe extern "C" fn on_tab_ctx_reopen(_button: *mut c_void, user_data: *mut c_v
     refresh_sidebar_tabs();
 }
 
+unsafe extern "C" fn on_tab_popover_closed(popover: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    (b.gtk_widget_unparent)(popover);
+    let _ = ACTIVE_TAB_CONTEXT_POPOVER.compare_exchange(
+        popover,
+        std::ptr::null_mut(),
+        Ordering::SeqCst,
+        Ordering::SeqCst,
+    );
+}
+
 unsafe extern "C" fn on_tab_right_click(
     gesture: *mut c_void,
     _n_press: libc::c_int,
-    _x: libc::c_double,
-    _y: libc::c_double,
+    x: libc::c_double,
+    y: libc::c_double,
     user_data: *mut c_void,
 ) {
     let idx = user_data as usize;
@@ -1757,9 +1726,31 @@ unsafe extern "C" fn on_tab_right_click(
         return;
     }
 
+    let old_popover = ACTIVE_TAB_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
+    if !old_popover.is_null() {
+        (b.gtk_popover_popdown)(old_popover);
+        (b.gtk_widget_unparent)(old_popover);
+    }
+
     let popover = (b.gtk_popover_new)();
     ACTIVE_TAB_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
     (b.gtk_widget_set_parent)(popover, widget);
+
+    let rect: [libc::c_int; 4] = [x as libc::c_int, y as libc::c_int, 1, 1];
+    (b.gtk_popover_set_pointing_to)(popover, rect.as_ptr() as *const c_void);
+
+    let closed_sig = CString::new("closed").unwrap();
+    let cb_closed = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_tab_popover_closed,
+    );
+    (b.g_signal_connect_data)(
+        popover,
+        closed_sig.as_ptr(),
+        cb_closed,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
 
     let vbox = (b.gtk_box_new)(1, 2);
     (b.gtk_widget_set_margin_start)(vbox, 4);
@@ -1783,21 +1774,24 @@ unsafe extern "C" fn on_tab_right_click(
 
     let clicked_sig = CString::new("clicked").unwrap();
 
-    let btn_new = (b.gtk_button_new_with_label)(CString::new("➕  New Tab").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_new, 0);
-    let cb_new = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_tab_ctx_new_tab,
+    // 1. Reload Tab (calls webview.reload())
+    let btn_reload =
+        (b.gtk_button_new_with_label)(CString::new("🔄  Reload Tab").unwrap().as_ptr());
+    (b.gtk_button_set_has_frame)(btn_reload, 0);
+    let cb_rel = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_tab_ctx_reload,
     );
     (b.g_signal_connect_data)(
-        btn_new,
+        btn_reload,
         clicked_sig.as_ptr(),
-        cb_new,
+        cb_rel,
         popover,
         std::ptr::null_mut(),
         0,
     );
-    (b.gtk_box_append)(vbox, btn_new);
+    (b.gtk_box_append)(vbox, btn_reload);
 
+    // 2. Duplicate Tab (opens a new tab with webview.get_uri())
     let btn_dup =
         (b.gtk_button_new_with_label)(CString::new("📋  Duplicate Tab").unwrap().as_ptr());
     (b.gtk_button_set_has_frame)(btn_dup, 0);
@@ -1814,21 +1808,41 @@ unsafe extern "C" fn on_tab_right_click(
     );
     (b.gtk_box_append)(vbox, btn_dup);
 
-    let btn_reload =
-        (b.gtk_button_new_with_label)(CString::new("🔄  Reload Tab").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_reload, 0);
-    let cb_rel = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_tab_ctx_reload,
+    // 3. Close Tab (closes the target tab)
+    let btn_close =
+        (b.gtk_button_new_with_label)(CString::new("✕  Close Tab").unwrap().as_ptr());
+    (b.gtk_button_set_has_frame)(btn_close, 0);
+    let cb_close = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_tab_ctx_close);
+    (b.g_signal_connect_data)(
+        btn_close,
+        clicked_sig.as_ptr(),
+        cb_close,
+        idx as *mut c_void,
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.gtk_box_append)(vbox, btn_close);
+
+    let sep = (b.gtk_separator_new)(0);
+    (b.gtk_box_append)(vbox, sep);
+
+    let btn_new = (b.gtk_button_new_with_label)(CString::new("➕  New Tab").unwrap().as_ptr());
+    (b.gtk_button_set_has_frame)(btn_new, 0);
+    let cb_new = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_tab_ctx_new_tab,
     );
     (b.g_signal_connect_data)(
-        btn_reload,
+        btn_new,
         clicked_sig.as_ptr(),
-        cb_rel,
+        cb_new,
         popover,
         std::ptr::null_mut(),
         0,
     );
-    (b.gtk_box_append)(vbox, btn_reload);
+    (b.gtk_box_append)(vbox, btn_new);
 
     let mute_label = if is_muted {
         "🔊  Unmute Tab"
@@ -1870,27 +1884,7 @@ unsafe extern "C" fn on_tab_right_click(
     );
     (b.gtk_box_append)(vbox, btn_pin);
 
-    let sep = (b.gtk_separator_new)(0);
-    (b.gtk_box_append)(vbox, sep);
-
     if total_tabs > 1 {
-        let btn_close =
-            (b.gtk_button_new_with_label)(CString::new("✕  Close Tab").unwrap().as_ptr());
-        (b.gtk_button_set_has_frame)(btn_close, 0);
-        let cb_close = std::mem::transmute::<
-            unsafe extern "C" fn(*mut c_void, *mut c_void),
-            GCallback,
-        >(on_tab_ctx_close);
-        (b.g_signal_connect_data)(
-            btn_close,
-            clicked_sig.as_ptr(),
-            cb_close,
-            idx as *mut c_void,
-            std::ptr::null_mut(),
-            0,
-        );
-        (b.gtk_box_append)(vbox, btn_close);
-
         let btn_close_others =
             (b.gtk_button_new_with_label)(CString::new("✕  Close Other Tabs").unwrap().as_ptr());
         (b.gtk_button_set_has_frame)(btn_close_others, 0);
@@ -6224,6 +6218,12 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     ACTIVE_WEBVIEW.store(webview, Ordering::SeqCst);
     (b.gtk_widget_set_vexpand)(webview, 1);
     (b.gtk_widget_set_hexpand)(webview, 1);
+
+    // Enable developer extras for context menu inspection
+    let settings = (b.webkit_web_view_get_settings)(webview);
+    if !settings.is_null() {
+        (b.webkit_settings_set_enable_developer_extras)(settings, 1);
+    }
 
     // Register WebKit script message handler for accentChanged
     let user_content_mgr = (b.webkit_web_view_get_user_content_manager)(webview);
