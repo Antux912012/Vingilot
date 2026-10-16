@@ -23,11 +23,6 @@ static ACTIVE_PANED: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_PINNED_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_SEPARATOR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_NORMAL_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_RIGHT_SIDEBAR: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_AI_BASE_URL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_AI_MODEL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_AI_API_KEY_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
-static ACTIVE_AI_STATUS_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_HUE_DESC_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_NORD_DESC_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_HUE_SCALE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -49,8 +44,8 @@ static ACTIVE_BREADCRUMBS_BOX: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null
 static DRAGGED_ITEM_ID: Mutex<Option<uuid::Uuid>> = Mutex::new(None);
 static VISIBLE_FOLDER_TILES: Mutex<Vec<(uuid::Uuid, usize)>> = Mutex::new(Vec::new());
 static VISIBLE_BREADCRUMB_BTNS: Mutex<Vec<(Option<uuid::Uuid>, usize)>> = Mutex::new(Vec::new());
-static ACTIVE_RIGHT_PANED: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_STAR_BTN: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
 static ACCENT_CSS_PROVIDER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 // Extended Browser Feature Statics
@@ -4642,78 +4637,7 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
     (b.adw_dialog_present)(dialog, parent);
 }
 
-unsafe extern "C" fn on_toggle_right_menu_clicked(_button: *mut c_void, _user_data: *mut c_void) {
-    let side_menu = ACTIVE_RIGHT_SIDEBAR.load(Ordering::SeqCst);
-    let right_paned = ACTIVE_RIGHT_PANED.load(Ordering::SeqCst);
-    let win = ACTIVE_WINDOW.load(Ordering::SeqCst);
-    if !side_menu.is_null() {
-        if let Some(b) = BINDINGS.get() {
-            let vis = (b.gtk_widget_get_visible)(side_menu);
-            let new_vis = if vis == 0 { 1 } else { 0 };
-            (b.gtk_widget_set_visible)(side_menu, new_vis);
-            if new_vis == 1 && !right_paned.is_null() && !win.is_null() {
-                let win_w = (b.gtk_widget_get_width)(win);
-                let target_pos = if win_w > 600 {
-                    win_w - 380
-                } else {
-                    (win_w * 2) / 3
-                };
-                (b.gtk_paned_set_position)(right_paned, target_pos);
-            }
-        }
-    }
-}
 
-unsafe extern "C" fn on_close_right_menu_clicked(_button: *mut c_void, _user_data: *mut c_void) {
-    let side_menu = ACTIVE_RIGHT_SIDEBAR.load(Ordering::SeqCst);
-    if !side_menu.is_null() {
-        if let Some(b) = BINDINGS.get() {
-            (b.gtk_widget_set_visible)(side_menu, 0);
-        }
-    }
-}
-
-unsafe extern "C" fn on_save_ai_settings_clicked(_button: *mut c_void, _user_data: *mut c_void) {
-    let b = match BINDINGS.get() {
-        Some(b) => b,
-        None => return,
-    };
-    let base_url_entry = ACTIVE_AI_BASE_URL_ENTRY.load(Ordering::SeqCst);
-    let model_entry = ACTIVE_AI_MODEL_ENTRY.load(Ordering::SeqCst);
-    let status_lbl = ACTIVE_AI_STATUS_LABEL.load(Ordering::SeqCst);
-
-    let base_url = if !base_url_entry.is_null() {
-        let ptr = (b.gtk_editable_get_text)(base_url_entry);
-        if !ptr.is_null() {
-            CStr::from_ptr(ptr).to_string_lossy().to_string()
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
-
-    let model = if !model_entry.is_null() {
-        let ptr = (b.gtk_editable_get_text)(model_entry);
-        if !ptr.is_null() {
-            CStr::from_ptr(ptr).to_string_lossy().to_string()
-        } else {
-            String::new()
-        }
-    } else {
-        String::new()
-    };
-
-    println!(
-        "[Vingilot] AI configuration saved: endpoint='{}', model='{}'",
-        base_url, model
-    );
-
-    if !status_lbl.is_null() {
-        let status_msg = CString::new("✓ AI Configuration Saved & Active!").unwrap();
-        (b.gtk_label_set_text)(status_lbl, status_msg.as_ptr());
-    }
-}
 
 unsafe fn navigate_to_url(url: &str) {
     let b = match BINDINGS.get() {
@@ -4956,24 +4880,38 @@ unsafe extern "C" fn on_theme_swatch_dark_toggled(btn: *mut c_void, _u: *mut c_v
     apply_accent_color(&current_accent);
 }
 
+unsafe fn popdown_menu_popover() {
+    let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
+    if !popover.is_null() {
+        if let Some(b) = BINDINGS.get() {
+            (b.gtk_popover_popdown)(popover);
+        }
+    }
+}
+
 unsafe extern "C" fn on_btn_action_new_tab(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     create_new_tab("about:blank", true);
 }
 
 unsafe extern "C" fn on_btn_action_new_incognito(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("vingilot-ui"));
     let _ = std::process::Command::new(exe).arg("--incognito").spawn();
 }
 
 unsafe extern "C" fn on_btn_action_history(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
 unsafe extern "C" fn on_btn_action_bookmarks(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
 unsafe extern "C" fn on_btn_action_find(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
     if !entry.is_null() {
         if let Some(b) = BINDINGS.get() {
@@ -4983,14 +4921,17 @@ unsafe extern "C" fn on_btn_action_find(_btn: *mut c_void, _u: *mut c_void) {
 }
 
 unsafe extern "C" fn on_btn_action_preferences(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     on_preferences_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
 unsafe extern "C" fn on_btn_action_shortcuts(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     show_keyboard_shortcuts_dialog();
 }
 
 unsafe extern "C" fn on_btn_action_about(_btn: *mut c_void, _u: *mut c_void) {
+    popdown_menu_popover();
     on_about_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
@@ -7693,19 +7634,7 @@ unsafe extern "C" fn on_home_clicked(_button: *mut c_void, _user_data: *mut c_vo
     refresh_sidebar_tabs();
 }
 
-unsafe fn make_group_card(b: &GtkBindings, title: &str) -> *mut c_void {
-    let card = (b.gtk_box_new)(1, 6);
-    let card_class = CString::new("menu-group-card").unwrap();
-    (b.gtk_widget_add_css_class)(card, card_class.as_ptr());
 
-    let lbl_title = (b.gtk_label_new)(CString::new(title).unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_title, 0.0);
-    let title_class = CString::new("menu-group-title").unwrap();
-    (b.gtk_widget_add_css_class)(lbl_title, title_class.as_ptr());
-    (b.gtk_box_append)(card, lbl_title);
-
-    card
-}
 
 unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) {
     let b = match BINDINGS.get() {
@@ -8204,12 +8133,15 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     );
     (b.adw_header_bar_pack_end)(header, btn_shield);
 
-    // Main Menu Button on top right of HeaderBar: opens side menu on the right
-    let menu_btn =
-        (b.gtk_button_new_from_icon_name)(CString::new("open-menu-symbolic").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(menu_btn, 0);
+    // Primary Menu Button on top right of HeaderBar: opens popover menu
+    let menu_btn = (b.gtk_menu_button_new)();
+    (b.gtk_menu_button_set_icon_name)(
+        menu_btn,
+        CString::new("open-menu-symbolic").unwrap().as_ptr(),
+    );
+    (b.gtk_menu_button_set_has_frame)(menu_btn, 0);
     (b.gtk_widget_set_size_request)(menu_btn, 38, 38);
-    let menu_tip = CString::new("Browser Menu & Settings").unwrap();
+    let menu_tip = CString::new("Browser Menu").unwrap();
     (b.gtk_widget_set_tooltip_text)(menu_btn, menu_tip.as_ptr());
     (b.adw_header_bar_pack_end)(header, menu_btn);
 
@@ -8344,94 +8276,133 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // -------------------------------------------------------------
     // Right Side Menu Construction (Grouped by functions)
     // -------------------------------------------------------------
-    let right_sidebar = (b.gtk_box_new)(1, 0); // Vertical box
-    ACTIVE_RIGHT_SIDEBAR.store(right_sidebar, Ordering::SeqCst);
-    let class_right = CString::new("right-sidebar").unwrap();
-    (b.gtk_widget_add_css_class)(right_sidebar, class_right.as_ptr());
-    (b.gtk_widget_set_size_request)(right_sidebar, 380, -1);
-    (b.gtk_widget_set_vexpand)(right_sidebar, 1);
-    (b.gtk_widget_set_visible)(right_sidebar, 0); // Hidden initially until menu clicked
+    // -------------------------------------------------------------
+    // Primary Menu Popover (Apostrophe/Chrome-style Libadwaita layout)
+    // -------------------------------------------------------------
+    let popover = (b.gtk_popover_new)();
+    ACTIVE_POPOVER.store(popover, Ordering::SeqCst);
+    (b.gtk_menu_button_set_popover)(menu_btn, popover);
 
-    // Header of the right side menu
-    let right_header = (b.gtk_box_new)(0, 6); // Horizontal
-    (b.gtk_widget_set_margin_start)(right_header, 12);
-    (b.gtk_widget_set_margin_end)(right_header, 12);
-    (b.gtk_widget_set_margin_top)(right_header, 10);
-    (b.gtk_widget_set_margin_bottom)(right_header, 10);
+    let popover_box = (b.gtk_box_new)(1, 6); // 1 = GTK_ORIENTATION_VERTICAL
+    (b.gtk_widget_set_size_request)(popover_box, 300, -1);
+    (b.gtk_widget_set_margin_start)(popover_box, 8);
+    (b.gtk_widget_set_margin_end)(popover_box, 8);
+    (b.gtk_widget_set_margin_top)(popover_box, 8);
+    (b.gtk_widget_set_margin_bottom)(popover_box, 8);
 
-    let lbl_menu_title =
-        (b.gtk_label_new)(CString::new("Browser Menu & Settings").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_menu_title, 0.0);
-    (b.gtk_widget_set_hexpand)(lbl_menu_title, 1);
-    let class_title = CString::new("menu-group-title").unwrap();
-    (b.gtk_widget_add_css_class)(lbl_menu_title, class_title.as_ptr());
+    // 1. Circular Theme Swatches: System, Light, Custom/Nord, Dark
+    let make_swatch_button = |class_name: &str, tooltip: &str| -> *mut c_void {
+        let btn = (b.gtk_toggle_button_new)();
+        (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new("theme-swatch").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new(class_name).unwrap().as_ptr());
+        (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
+        (b.gtk_button_set_has_frame)(btn, 0);
 
-    let btn_close_menu = (b.gtk_button_new_with_label)(CString::new("✕").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_close_menu, 0);
-    let close_tip = CString::new("Close Menu").unwrap();
-    (b.gtk_widget_set_tooltip_text)(btn_close_menu, close_tip.as_ptr());
+        let img = (b.gtk_image_new_from_icon_name)(
+            CString::new("object-select-symbolic").unwrap().as_ptr(),
+        );
+        (b.gtk_image_set_pixel_size)(img, 16);
+        (b.gtk_button_set_child)(btn, img);
+        btn
+    };
 
-    (b.gtk_box_append)(right_header, lbl_menu_title);
-    (b.gtk_box_append)(right_header, btn_close_menu);
-    (b.gtk_box_append)(right_sidebar, right_header);
+    let btn_swatch_sys = make_swatch_button("theme-swatch-system", "System Appearance (Auto)");
+    let btn_swatch_light = make_swatch_button("theme-swatch-light", "Light Appearance");
+    let btn_swatch_nord = make_swatch_button("theme-swatch-nord", "Custom / Nord Frost Appearance");
+    let btn_swatch_dark = make_swatch_button("theme-swatch-dark", "Dark Appearance");
 
-    // Scrollable container for menu contents
-    let scroller_right = (b.gtk_scrolled_window_new)();
-    (b.gtk_widget_set_vexpand)(scroller_right, 1);
-    (b.gtk_scrolled_window_set_policy)(scroller_right, 2, 1); // H=Never (2), V=Automatic (1)
+    (b.gtk_toggle_button_set_group)(btn_swatch_light, btn_swatch_sys);
+    (b.gtk_toggle_button_set_group)(btn_swatch_nord, btn_swatch_sys);
+    (b.gtk_toggle_button_set_group)(btn_swatch_dark, btn_swatch_sys);
 
-    let panel_vbox = (b.gtk_box_new)(1, 8); // Vertical layout for options
-    (b.gtk_widget_set_margin_bottom)(panel_vbox, 16);
+    let style_mgr = (b.adw_style_manager_get_default)();
+    let current_scheme = if !style_mgr.is_null() {
+        (b.adw_style_manager_get_color_scheme)(style_mgr)
+    } else {
+        0
+    };
+    if current_scheme == 1 {
+        (b.gtk_toggle_button_set_active)(btn_swatch_light, 1);
+    } else if current_scheme == 4 {
+        (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
+    } else {
+        (b.gtk_toggle_button_set_active)(btn_swatch_sys, 1);
+    }
 
-    // Action Items & Chrome-Style Shortcuts
-    let quick_card = make_group_card(b, "⚡ Browser Actions");
-    let quick_box = (b.gtk_box_new)(1, 2);
+    let swatches_box = (b.gtk_box_new)(0, 10);
+    (b.gtk_widget_set_halign)(swatches_box, 3); // GTK_ALIGN_CENTER
+    (b.gtk_widget_set_margin_top)(swatches_box, 2);
+    (b.gtk_widget_set_margin_bottom)(swatches_box, 6);
+    (b.gtk_box_append)(swatches_box, btn_swatch_sys);
+    (b.gtk_box_append)(swatches_box, btn_swatch_light);
+    (b.gtk_box_append)(swatches_box, btn_swatch_nord);
+    (b.gtk_box_append)(swatches_box, btn_swatch_dark);
+    (b.gtk_box_append)(popover_box, swatches_box);
 
-    let btn_action_new_tab = make_menu_action_row(b, "tab-new-symbolic", "New Tab", "Ctrl+T");
-    let btn_action_new_incognito =
-        make_menu_action_row(b, "view-conceal-symbolic", "New Incognito Window", "Ctrl+Shift+N");
-    (b.gtk_box_append)(quick_box, btn_action_new_tab);
-    (b.gtk_box_append)(quick_box, btn_action_new_incognito);
+    // Compact Hue and Nord Sliders
+    let lbl_hue = (b.gtk_label_new)(
+        CString::new("Continuous Accent Hue: 210° (#1f80e0)")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.gtk_label_set_xalign)(lbl_hue, 0.0);
+    ACTIVE_HUE_DESC_LABEL.store(lbl_hue, Ordering::SeqCst);
+    (b.gtk_box_append)(popover_box, lbl_hue);
 
-    let sep1 = (b.gtk_separator_new)(0);
-    (b.gtk_widget_set_margin_top)(sep1, 4);
-    (b.gtk_widget_set_margin_bottom)(sep1, 4);
-    (b.gtk_box_append)(quick_box, sep1);
+    let hue_scale = (b.gtk_scale_new_with_range)(0, 0.0, 360.0, 1.0);
+    (b.gtk_scale_set_draw_value)(hue_scale, 0);
+    (b.gtk_widget_add_css_class)(hue_scale, CString::new("hue-slider").unwrap().as_ptr());
+    (b.gtk_range_set_value)(hue_scale, 210.0);
+    ACTIVE_HUE_SCALE.store(hue_scale, Ordering::SeqCst);
+    (b.gtk_box_append)(popover_box, hue_scale);
 
-    let btn_action_history =
-        make_menu_action_row(b, "document-open-recent-symbolic", "History", "Ctrl+H");
-    let btn_action_bookmarks =
-        make_menu_action_row(b, "user-bookmarks-symbolic", "Bookmarks", "Ctrl+Shift+O");
-    let btn_action_find =
-        make_menu_action_row(b, "edit-find-symbolic", "Find in Page", "Ctrl+F");
-    (b.gtk_box_append)(quick_box, btn_action_history);
-    (b.gtk_box_append)(quick_box, btn_action_bookmarks);
-    (b.gtk_box_append)(quick_box, btn_action_find);
+    let lbl_nord = (b.gtk_label_new)(
+        CString::new("Nord Palette: Nord 8 (Frost Cyan) #88C0D0")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.gtk_label_set_xalign)(lbl_nord, 0.0);
+    ACTIVE_NORD_DESC_LABEL.store(lbl_nord, Ordering::SeqCst);
+    (b.gtk_box_append)(popover_box, lbl_nord);
 
-    let sep2 = (b.gtk_separator_new)(0);
-    (b.gtk_widget_set_margin_top)(sep2, 4);
-    (b.gtk_widget_set_margin_bottom)(sep2, 4);
-    (b.gtk_box_append)(quick_box, sep2);
+    let nord_scale = (b.gtk_scale_new_with_range)(0, 0.0, 15.0, 1.0);
+    (b.gtk_scale_set_draw_value)(nord_scale, 0);
+    (b.gtk_widget_add_css_class)(nord_scale, CString::new("nord-slider").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(
+        nord_scale,
+        CString::new("scale-has-marks-below").unwrap().as_ptr(),
+    );
 
-    let btn_action_prefs =
-        make_menu_action_row(b, "preferences-system-symbolic", "Preferences", "Ctrl+,");
-    let btn_action_shortcuts =
-        make_menu_action_row(b, "input-keyboard-symbolic", "Keyboard Shortcuts", "Ctrl+?");
-    let btn_action_about =
-        make_menu_action_row(b, "help-about-symbolic", "About Vingilot", "");
-    (b.gtk_box_append)(quick_box, btn_action_prefs);
-    (b.gtk_box_append)(quick_box, btn_action_shortcuts);
-    (b.gtk_box_append)(quick_box, btn_action_about);
+    (b.gtk_scale_add_mark)(nord_scale, 0.0, 3, CString::new("Polar").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 4.0, 3, CString::new("Snow").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 7.0, 3, CString::new("Frost").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 11.0, 3, CString::new("Aurora").unwrap().as_ptr());
+    (b.gtk_range_set_value)(nord_scale, 8.0);
+    ACTIVE_NORD_SCALE.store(nord_scale, Ordering::SeqCst);
+    (b.gtk_box_append)(popover_box, nord_scale);
 
-    (b.gtk_box_append)(quick_card, quick_box);
-    (b.gtk_box_append)(panel_vbox, quick_card);
+    let saved_accent = load_saved_accent();
+    if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| {
+        n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)
+    }) {
+        (b.gtk_range_set_value)(nord_scale, idx as f64);
+        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+        if let Ok(c_text) = CString::new(text) {
+            (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
+        }
+    }
 
-    // Group 1: Search Engines Preferences (Icon-Only Linked Bar)
-    let card_search = make_group_card(b, "🔍 Search Engine Provider");
+    let sep_theme = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep_theme, 4);
+    (b.gtk_widget_set_margin_bottom)(sep_theme, 4);
+    (b.gtk_box_append)(popover_box, sep_theme);
+
+    // 2. Icon-Only Search Provider Bar (Linked GtkBox)
     let search_btns_box = (b.gtk_box_new)(0, 0);
     (b.gtk_widget_add_css_class)(search_btns_box, CString::new("linked").unwrap().as_ptr());
     (b.gtk_widget_set_hexpand)(search_btns_box, 1);
-    (b.gtk_widget_set_margin_top)(search_btns_box, 4);
+    (b.gtk_widget_set_margin_top)(search_btns_box, 2);
     (b.gtk_widget_set_margin_bottom)(search_btns_box, 4);
 
     let make_search_toggle = |icon_name: &str, tooltip: &str| -> *mut c_void {
@@ -8477,227 +8448,51 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(search_btns_box, btn_brave);
     (b.gtk_box_append)(search_btns_box, btn_bing);
     (b.gtk_box_append)(search_btns_box, btn_ecosia);
-    (b.gtk_box_append)(card_search, search_btns_box);
+    (b.gtk_box_append)(popover_box, search_btns_box);
 
-    let (row_priv_search, _) = make_switch_row(b, "Encrypted & Private Queries", true);
-    (b.gtk_box_append)(card_search, row_priv_search);
-    (b.gtk_box_append)(panel_vbox, card_search);
+    let sep_search = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep_search, 4);
+    (b.gtk_widget_set_margin_bottom)(sep_search, 4);
+    (b.gtk_box_append)(popover_box, sep_search);
 
-    // Group 2: Theming
-    let card_theme = make_group_card(b, "🎨 Theming & Appearance");
-    let lbl_theme_desc = (b.gtk_label_new)(
-        CString::new("Color scheme swatches:")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_label_set_xalign)(lbl_theme_desc, 0.0);
-    (b.gtk_box_append)(card_theme, lbl_theme_desc);
+    // 3. Action Items & Chrome-Style Shortcuts
+    let btn_action_new_tab = make_menu_action_row(b, "tab-new-symbolic", "New Tab", "Ctrl+T");
+    let btn_action_new_incognito =
+        make_menu_action_row(b, "view-conceal-symbolic", "New Incognito Window", "Ctrl+Shift+N");
+    (b.gtk_box_append)(popover_box, btn_action_new_tab);
+    (b.gtk_box_append)(popover_box, btn_action_new_incognito);
 
-    // Circular Theme Swatches: System, Light, Custom/Nord, Dark
-    let make_swatch_button = |class_name: &str, tooltip: &str| -> *mut c_void {
-        let btn = (b.gtk_toggle_button_new)();
-        (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
-        (b.gtk_widget_add_css_class)(btn, CString::new("theme-swatch").unwrap().as_ptr());
-        (b.gtk_widget_add_css_class)(btn, CString::new(class_name).unwrap().as_ptr());
-        (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
-        (b.gtk_button_set_has_frame)(btn, 0);
+    let sep_act1 = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep_act1, 4);
+    (b.gtk_widget_set_margin_bottom)(sep_act1, 4);
+    (b.gtk_box_append)(popover_box, sep_act1);
 
-        let img = (b.gtk_image_new_from_icon_name)(
-            CString::new("object-select-symbolic").unwrap().as_ptr(),
-        );
-        (b.gtk_image_set_pixel_size)(img, 16);
-        (b.gtk_button_set_child)(btn, img);
-        btn
-    };
+    let btn_action_history =
+        make_menu_action_row(b, "document-open-recent-symbolic", "History", "Ctrl+H");
+    let btn_action_bookmarks =
+        make_menu_action_row(b, "user-bookmarks-symbolic", "Bookmarks", "Ctrl+Shift+O");
+    let btn_action_find =
+        make_menu_action_row(b, "edit-find-symbolic", "Find in Page", "Ctrl+F");
+    (b.gtk_box_append)(popover_box, btn_action_history);
+    (b.gtk_box_append)(popover_box, btn_action_bookmarks);
+    (b.gtk_box_append)(popover_box, btn_action_find);
 
-    let btn_swatch_sys = make_swatch_button("theme-swatch-system", "System Appearance (Auto)");
-    let btn_swatch_light = make_swatch_button("theme-swatch-light", "Light Appearance");
-    let btn_swatch_nord = make_swatch_button("theme-swatch-nord", "Custom / Nord Frost Appearance");
-    let btn_swatch_dark = make_swatch_button("theme-swatch-dark", "Dark Appearance");
+    let sep_act2 = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep_act2, 4);
+    (b.gtk_widget_set_margin_bottom)(sep_act2, 4);
+    (b.gtk_box_append)(popover_box, sep_act2);
 
-    (b.gtk_toggle_button_set_group)(btn_swatch_light, btn_swatch_sys);
-    (b.gtk_toggle_button_set_group)(btn_swatch_nord, btn_swatch_sys);
-    (b.gtk_toggle_button_set_group)(btn_swatch_dark, btn_swatch_sys);
+    let btn_action_prefs =
+        make_menu_action_row(b, "preferences-system-symbolic", "Preferences", "Ctrl+,");
+    let btn_action_shortcuts =
+        make_menu_action_row(b, "input-keyboard-symbolic", "Keyboard Shortcuts", "Ctrl+?");
+    let btn_action_about =
+        make_menu_action_row(b, "help-about-symbolic", "About Vingilot", "");
+    (b.gtk_box_append)(popover_box, btn_action_prefs);
+    (b.gtk_box_append)(popover_box, btn_action_shortcuts);
+    (b.gtk_box_append)(popover_box, btn_action_about);
 
-    let style_mgr = (b.adw_style_manager_get_default)();
-    let current_scheme = if !style_mgr.is_null() {
-        (b.adw_style_manager_get_color_scheme)(style_mgr)
-    } else {
-        0
-    };
-    if current_scheme == 1 {
-        (b.gtk_toggle_button_set_active)(btn_swatch_light, 1);
-    } else if current_scheme == 4 {
-        (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
-    } else {
-        (b.gtk_toggle_button_set_active)(btn_swatch_sys, 1);
-    }
-
-    let swatches_box = (b.gtk_box_new)(0, 10);
-    (b.gtk_widget_set_halign)(swatches_box, 3); // GTK_ALIGN_CENTER
-    (b.gtk_widget_set_margin_top)(swatches_box, 6);
-    (b.gtk_widget_set_margin_bottom)(swatches_box, 10);
-    (b.gtk_box_append)(swatches_box, btn_swatch_sys);
-    (b.gtk_box_append)(swatches_box, btn_swatch_light);
-    (b.gtk_box_append)(swatches_box, btn_swatch_nord);
-    (b.gtk_box_append)(swatches_box, btn_swatch_dark);
-    (b.gtk_box_append)(card_theme, swatches_box);
-
-    // Accent Hue Slider
-    let lbl_hue = (b.gtk_label_new)(CString::new("Continuous Accent Hue: 210° (#1f80e0)").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_hue, 0.0);
-    ACTIVE_HUE_DESC_LABEL.store(lbl_hue, Ordering::SeqCst);
-    (b.gtk_box_append)(card_theme, lbl_hue);
-
-    let hue_scale = (b.gtk_scale_new_with_range)(0, 0.0, 360.0, 1.0);
-    (b.gtk_scale_set_draw_value)(hue_scale, 0);
-    (b.gtk_widget_add_css_class)(hue_scale, CString::new("hue-slider").unwrap().as_ptr());
-    (b.gtk_range_set_value)(hue_scale, 210.0);
-    ACTIVE_HUE_SCALE.store(hue_scale, Ordering::SeqCst);
-    (b.gtk_box_append)(card_theme, hue_scale);
-
-    // Nord Palette Slider with Cluster Marks
-    let lbl_nord = (b.gtk_label_new)(CString::new("Nord Palette: Nord 8 (Frost Cyan) #88C0D0").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_nord, 0.0);
-    ACTIVE_NORD_DESC_LABEL.store(lbl_nord, Ordering::SeqCst);
-    (b.gtk_box_append)(card_theme, lbl_nord);
-
-    let nord_scale = (b.gtk_scale_new_with_range)(0, 0.0, 15.0, 1.0);
-    (b.gtk_scale_set_draw_value)(nord_scale, 0);
-    (b.gtk_widget_add_css_class)(nord_scale, CString::new("nord-slider").unwrap().as_ptr());
-    (b.gtk_widget_add_css_class)(nord_scale, CString::new("scale-has-marks-below").unwrap().as_ptr());
-
-    // Marks added for the 4 Nord clusters (GtkPositionType GTK_POS_BOTTOM = 3)
-    (b.gtk_scale_add_mark)(nord_scale, 0.0, 3, CString::new("Polar").unwrap().as_ptr());
-    (b.gtk_scale_add_mark)(nord_scale, 4.0, 3, CString::new("Snow").unwrap().as_ptr());
-    (b.gtk_scale_add_mark)(nord_scale, 7.0, 3, CString::new("Frost").unwrap().as_ptr());
-    (b.gtk_scale_add_mark)(nord_scale, 11.0, 3, CString::new("Aurora").unwrap().as_ptr());
-    (b.gtk_range_set_value)(nord_scale, 8.0);
-    ACTIVE_NORD_SCALE.store(nord_scale, Ordering::SeqCst);
-    (b.gtk_box_append)(card_theme, nord_scale);
-
-    // Initialise slider values from saved accent if matched
-    let saved_accent = load_saved_accent();
-    if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)) {
-        (b.gtk_range_set_value)(nord_scale, idx as f64);
-        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
-        if let Ok(c_text) = CString::new(text) {
-            (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
-        }
-    }
-
-    let (row_reader_mode, _) = make_switch_row(b, "Auto Distraction-Free Reader Mode", true);
-    (b.gtk_box_append)(card_theme, row_reader_mode);
-    (b.gtk_box_append)(panel_vbox, card_theme);
-
-    // Group 3: Webkit Personalisation
-    let card_webkit = make_group_card(b, "🌐 Webkit Personalisation");
-    let (row_js, _) = make_switch_row(b, "Enable JavaScript Execution", true);
-    let (row_kinetic, _) = make_switch_row(b, "Kinetic Momentum Scrolling", true);
-    let (row_cookies, _) = make_switch_row(b, "Strict Ephemeral Storage (Cookie Isolation)", true);
-    let (row_trackers, _) = make_switch_row(b, "Enhanced Tracking Protection", true);
-    let (row_article, _) = make_switch_row(b, "Auto Reader View Detection", true);
-    (b.gtk_box_append)(card_webkit, row_js);
-    (b.gtk_box_append)(card_webkit, row_kinetic);
-    (b.gtk_box_append)(card_webkit, row_cookies);
-    (b.gtk_box_append)(card_webkit, row_trackers);
-    (b.gtk_box_append)(card_webkit, row_article);
-    (b.gtk_box_append)(panel_vbox, card_webkit);
-
-    // Group 4: HW Decoding and Acceleration
-    let card_hw = make_group_card(b, "⚡ HW Decoding and Acceleration");
-    let (row_hw_gpu, _) = make_switch_row(b, "Hardware GPU Acceleration", true);
-    let (row_vulkan, _) = make_switch_row(b, "Vulkan Graphics Pipeline (GSK)", true);
-    let (row_wayland, _) = make_switch_row(b, "Native Wayland Compositing", true);
-    let (row_vcodec, _) = make_switch_row(b, "Hardware Video Decoding (VA-API/NVDEC)", true);
-    let (row_webgl, _) = make_switch_row(b, "WebGL 2.0 & Canvas Hardware Rendering", true);
-    (b.gtk_box_append)(card_hw, row_hw_gpu);
-    (b.gtk_box_append)(card_hw, row_vulkan);
-    (b.gtk_box_append)(card_hw, row_wayland);
-    (b.gtk_box_append)(card_hw, row_vcodec);
-    (b.gtk_box_append)(card_hw, row_webgl);
-    (b.gtk_box_append)(panel_vbox, card_hw);
-
-    // Group 5: AI Features (with editable fields)
-    let card_ai = make_group_card(b, "🤖 AI Features");
-
-    let lbl_ai_ep = (b.gtk_label_new)(CString::new("AI Provider Endpoint:").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_ai_ep, 0.0);
-    let entry_ai_ep = (b.gtk_entry_new)();
-    ACTIVE_AI_BASE_URL_ENTRY.store(entry_ai_ep, Ordering::SeqCst);
-    (b.gtk_entry_set_placeholder_text)(
-        entry_ai_ep,
-        CString::new("e.g. http://localhost:11434/v1 or https://api.openai.com/v1")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_editable_set_text)(
-        entry_ai_ep,
-        CString::new("http://localhost:11434/v1").unwrap().as_ptr(),
-    );
-
-    let lbl_ai_mod = (b.gtk_label_new)(CString::new("AI Model Name:").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_ai_mod, 0.0);
-    let entry_ai_mod = (b.gtk_entry_new)();
-    ACTIVE_AI_MODEL_ENTRY.store(entry_ai_mod, Ordering::SeqCst);
-    (b.gtk_entry_set_placeholder_text)(
-        entry_ai_mod,
-        CString::new("e.g. llama3.2, mistral, gpt-4o-mini")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_editable_set_text)(entry_ai_mod, CString::new("llama3.2").unwrap().as_ptr());
-
-    let lbl_ai_key = (b.gtk_label_new)(CString::new("AI API Key (Optional):").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_ai_key, 0.0);
-    let entry_ai_key = (b.gtk_entry_new)();
-    ACTIVE_AI_API_KEY_ENTRY.store(entry_ai_key, Ordering::SeqCst);
-    (b.gtk_entry_set_placeholder_text)(
-        entry_ai_key,
-        CString::new("Enter API Key (sk-...)").unwrap().as_ptr(),
-    );
-
-    let (row_ai_sum, _) = make_switch_row(b, "Contextual Web Summarization", true);
-    let (row_ai_mcp, _) = make_switch_row(b, "Agentic Navigation & MCP Dispatcher", true);
-
-    let btn_save_ai = (b.gtk_button_new_with_label)(
-        CString::new("💾  Apply & Save AI Configuration")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_widget_set_margin_top)(btn_save_ai, 6);
-
-    let lbl_ai_status = (b.gtk_label_new)(CString::new("Ready to assist").unwrap().as_ptr());
-    ACTIVE_AI_STATUS_LABEL.store(lbl_ai_status, Ordering::SeqCst);
-    (b.gtk_label_set_xalign)(lbl_ai_status, 0.0);
-
-    (b.gtk_box_append)(card_ai, lbl_ai_ep);
-    (b.gtk_box_append)(card_ai, entry_ai_ep);
-    (b.gtk_box_append)(card_ai, lbl_ai_mod);
-    (b.gtk_box_append)(card_ai, entry_ai_mod);
-    (b.gtk_box_append)(card_ai, lbl_ai_key);
-    (b.gtk_box_append)(card_ai, entry_ai_key);
-    (b.gtk_box_append)(card_ai, row_ai_sum);
-    (b.gtk_box_append)(card_ai, row_ai_mcp);
-    (b.gtk_box_append)(card_ai, btn_save_ai);
-    (b.gtk_box_append)(card_ai, lbl_ai_status);
-    (b.gtk_box_append)(panel_vbox, card_ai);
-
-    (b.gtk_scrolled_window_set_child)(scroller_right, panel_vbox);
-    (b.gtk_box_append)(right_sidebar, scroller_right);
-
-    // Resizable Paned Container: Left Paned (Sidebar + WebView) & Right Side Menu
-    let right_paned = (b.gtk_paned_new)(0); // 0 = GTK_ORIENTATION_HORIZONTAL
-    ACTIVE_RIGHT_PANED.store(right_paned, Ordering::SeqCst);
-    (b.gtk_widget_set_vexpand)(right_paned, 1);
-    (b.gtk_widget_set_hexpand)(right_paned, 1);
-    (b.gtk_paned_set_wide_handle)(right_paned, 1);
-    (b.gtk_paned_set_start_child)(right_paned, paned);
-    (b.gtk_paned_set_end_child)(right_paned, right_sidebar);
-    (b.gtk_paned_set_resize_start_child)(right_paned, 1);
-    (b.gtk_paned_set_shrink_start_child)(right_paned, 1);
-    (b.gtk_paned_set_resize_end_child)(right_paned, 0);
-    (b.gtk_paned_set_shrink_end_child)(right_paned, 1);
+    (b.gtk_popover_set_child)(popover, popover_box);
 
     // Connect signals
     let clicked_sig = CString::new("clicked").unwrap();
@@ -8746,18 +8541,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
     >(on_zoom_reset_clicked);
-
-    let cb_toggle_menu = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_toggle_right_menu_clicked);
-    let cb_close_menu = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_close_right_menu_clicked);
-    let cb_save_ai = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_save_ai_settings_clicked,
-    );
 
     let cb_search_toggle = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
@@ -8822,25 +8605,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         GCallback,
     >(on_theme_swatch_dark_toggled);
 
-    // Menu toggle and close signals
-    (b.g_signal_connect_data)(
-        menu_btn,
-        clicked_sig.as_ptr(),
-        cb_toggle_menu,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-    (b.g_signal_connect_data)(
-        btn_close_menu,
-        clicked_sig.as_ptr(),
-        cb_close_menu,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-
-    // Chrome-style action items signals in side menu
+    // Chrome-style action items signals in popover menu
     (b.g_signal_connect_data)(
         btn_action_new_tab,
         clicked_sig.as_ptr(),
@@ -9002,15 +8767,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // AI save signal in side menu
-    (b.g_signal_connect_data)(
-        btn_save_ai,
-        clicked_sig.as_ptr(),
-        cb_save_ai,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
 
     // Sidebar signals (when present in normal mode)
     if !btn_sidebar.is_null() {
@@ -9114,10 +8870,10 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Box container: HeaderBar on top, right_paned (paned + right side menu) below
+    // Box container: HeaderBar on top, Paned (Sidebar + WebView) below
     let box_vertical = (b.gtk_box_new)(1, 0); // 1 = GTK_ORIENTATION_VERTICAL
     (b.gtk_box_append)(box_vertical, header);
-    (b.gtk_box_append)(box_vertical, right_paned);
+    (b.gtk_box_append)(box_vertical, paned);
 
     (b.adw_application_window_set_content)(win, box_vertical);
     (b.gtk_window_present)(win);
