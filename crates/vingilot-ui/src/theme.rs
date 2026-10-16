@@ -249,6 +249,90 @@ pub fn base_css() -> &'static str {
         margin-top: 4px;
     }
 
+    /* Circular Theme Swatches */
+    button.theme-swatch {
+        min-width: 34px;
+        min-height: 34px;
+        border-radius: 9999px;
+        padding: 0;
+        margin: 0 4px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+        transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    button.theme-swatch:hover {
+        transform: scale(1.08);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+    button.theme-swatch:checked {
+        outline: 2px solid @accent_color;
+        outline-offset: 2px;
+    }
+    button.theme-swatch image {
+        opacity: 0;
+        transition: opacity 120ms ease;
+    }
+    button.theme-swatch:checked image {
+        opacity: 1;
+    }
+
+    /* System Swatch: Split circle (linear-gradient 45deg: white 50%, #2E3440 50%) */
+    button.theme-swatch-system {
+        background: linear-gradient(45deg, #ffffff 50%, #2E3440 50%) !important;
+        border: 1px solid alpha(currentColor, 0.25) !important;
+    }
+    button.theme-swatch-system:checked image {
+        color: #3584e4 !important;
+    }
+
+    /* Light Swatch: White circle */
+    button.theme-swatch-light {
+        background: #ffffff !important;
+        border: 1px solid rgba(0, 0, 0, 0.25) !important;
+    }
+    button.theme-swatch-light:checked image {
+        color: #2E3440 !important;
+    }
+
+    /* Custom / Nord Swatch: Cream / Nord Frost circle */
+    button.theme-swatch-nord {
+        background: linear-gradient(135deg, #88C0D0 50%, #81A1C1 50%) !important;
+        border: 1px solid alpha(currentColor, 0.25) !important;
+    }
+    button.theme-swatch-nord:checked image {
+        color: #2E3440 !important;
+    }
+
+    /* Dark Swatch: Dark circle (#2E3440) */
+    button.theme-swatch-dark {
+        background: #2E3440 !important;
+        border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    }
+    button.theme-swatch-dark:checked image {
+        color: #ffffff !important;
+    }
+
+    /* Chrome/Apostrophe Style Menu Action Rows */
+    button.menu-action-row {
+        border-radius: 8px;
+        padding: 6px 10px;
+        min-height: 38px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        transition: background-color 140ms ease;
+    }
+    button.menu-action-row:hover {
+        background-color: alpha(currentColor, 0.08);
+    }
+    button.menu-action-row:active {
+        background-color: alpha(currentColor, 0.14);
+    }
+    .menu-action-row .dim-label {
+        opacity: 0.55;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
     /* Start Page Styling */
     .start-page-container {
         padding: 32px 24px;

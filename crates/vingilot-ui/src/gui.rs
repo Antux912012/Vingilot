@@ -184,6 +184,9 @@ struct GtkBindings {
     adw_action_row_set_subtitle: unsafe extern "C" fn(*mut c_void, *const c_char),
     adw_switch_row_new: unsafe extern "C" fn() -> *mut c_void,
     adw_switch_row_set_active: unsafe extern "C" fn(*mut c_void, c_int),
+    adw_style_manager_get_default: unsafe extern "C" fn() -> *mut c_void,
+    adw_style_manager_set_color_scheme: unsafe extern "C" fn(*mut c_void, libc::c_int),
+    adw_style_manager_get_color_scheme: unsafe extern "C" fn(*mut c_void) -> libc::c_int,
 
     // GTK4
     gtk_window_set_title: unsafe extern "C" fn(*mut c_void, *const c_char),
@@ -426,6 +429,9 @@ struct GtkBindings {
         *const c_void,
     ) -> *mut c_void,
     g_simple_action_new: unsafe extern "C" fn(*const c_char, *mut c_void) -> *mut c_void,
+    g_action_map_add_action: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_application_set_accels_for_action:
+        unsafe extern "C" fn(*mut c_void, *const c_char, *const *const c_char),
     g_bytes_new: unsafe extern "C" fn(*const c_void, libc::size_t) -> *mut c_void,
     g_bytes_unref: unsafe extern "C" fn(*mut c_void),
     gdk_display_get_clipboard: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
@@ -561,6 +567,15 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
         adw_action_row_set_subtitle: load_symbol(libadw, "adw_action_row_set_subtitle")?,
         adw_switch_row_new: load_symbol(libadw, "adw_switch_row_new")?,
         adw_switch_row_set_active: load_symbol(libadw, "adw_switch_row_set_active")?,
+        adw_style_manager_get_default: load_symbol(libadw, "adw_style_manager_get_default")?,
+        adw_style_manager_set_color_scheme: load_symbol(
+            libadw,
+            "adw_style_manager_set_color_scheme",
+        )?,
+        adw_style_manager_get_color_scheme: load_symbol(
+            libadw,
+            "adw_style_manager_get_color_scheme",
+        )?,
 
         gtk_window_set_title: load_symbol(libgtk, "gtk_window_set_title")?,
         gtk_window_set_default_size: load_symbol(libgtk, "gtk_window_set_default_size")?,
@@ -868,6 +883,11 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
 
         g_object_new: load_symbol(libgobj, "g_object_new")?,
         g_simple_action_new: load_symbol(libgio, "g_simple_action_new")?,
+        g_action_map_add_action: load_symbol(libgio, "g_action_map_add_action")?,
+        gtk_application_set_accels_for_action: load_symbol(
+            libgtk,
+            "gtk_application_set_accels_for_action",
+        )?,
         g_bytes_new: load_symbol(libglib, "g_bytes_new")?,
         g_bytes_unref: load_symbol(libglib, "g_bytes_unref")?,
         gdk_display_get_clipboard: load_symbol(libgtk, "gdk_display_get_clipboard")?,
@@ -3105,10 +3125,15 @@ unsafe extern "C" fn on_window_key_pressed(
             return 1;
         }
 
-        if shift_pressed && (keyval == 0x50 || keyval == 0x70) {
+        if shift_pressed && (keyval == 0x50 || keyval == 0x70 || keyval == 0x4e || keyval == 0x6e) {
             let exe =
                 std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("vingilot-ui"));
             let _ = std::process::Command::new(exe).arg("--incognito").spawn();
+            return 1;
+        }
+
+        if shift_pressed && (keyval == 0x4f || keyval == 0x6f) {
+            on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
             return 1;
         }
 
@@ -3140,7 +3165,7 @@ unsafe extern "C" fn on_window_key_pressed(
             return 1;
         }
 
-        if keyval == 0x6c || keyval == 0x4c {
+        if keyval == 0x6c || keyval == 0x4c || keyval == 0x66 || keyval == 0x46 {
             let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
             if !entry.is_null() {
                 if let Some(b) = BINDINGS.get() {
@@ -3157,6 +3182,16 @@ unsafe extern "C" fn on_window_key_pressed(
 
         if keyval == 0x68 || keyval == 0x48 {
             on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+            return 1;
+        }
+
+        if keyval == 0x2c {
+            on_preferences_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+            return 1;
+        }
+
+        if keyval == 0x3f || keyval == 0x2f {
+            show_keyboard_shortcuts_dialog();
             return 1;
         }
     }
@@ -4207,6 +4242,7 @@ unsafe extern "C" fn on_toggle_sidebar_clicked(_button: *mut c_void, _user_data:
     refresh_sidebar_tabs();
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn on_new_tab_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
     if !popover.is_null() {
@@ -4217,6 +4253,7 @@ unsafe extern "C" fn on_new_tab_clicked(_button: *mut c_void, _user_data: *mut c
     on_sidebar_new_tab_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn on_new_incognito_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
     if !popover.is_null() {
@@ -4321,6 +4358,7 @@ unsafe extern "C" fn on_lens_button_notify_active(
     update_zoom_display(zoom);
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn on_history_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
     if !popover.is_null() {
@@ -4821,20 +4859,347 @@ unsafe extern "C" fn on_search_ecosia_clicked(_b: *mut c_void, _u: *mut c_void) 
     set_default_search_engine("Ecosia", "https://www.ecosia.org/search?q=%s", "https://www.ecosia.org");
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_system_clicked(_b: *mut c_void, _u: *mut c_void) {
     apply_css_to_display(crate::theme::base_css());
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_light_clicked(_b: *mut c_void, _u: *mut c_void) {
     apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa !important; color: #111111 !important; }");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_dark_clicked(_b: *mut c_void, _u: *mut c_void) {
     apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #242424 !important; color: #ffffff !important; }");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_true_black_clicked(_b: *mut c_void, _u: *mut c_void) {
     apply_css_to_display(crate::theme::AppTheme::TrueBlack.custom_css().unwrap_or(""));
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_incognito_blue_clicked(_b: *mut c_void, _u: *mut c_void) {
     apply_css_to_display(crate::theme::incognito_css());
+}
+
+unsafe extern "C" fn on_theme_swatch_system_toggled(btn: *mut c_void, _u: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(bindings) => bindings,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(btn) == 0 {
+        return;
+    }
+    let mgr = (b.adw_style_manager_get_default)();
+    if !mgr.is_null() {
+        (b.adw_style_manager_set_color_scheme)(mgr, 0); // ADW_COLOR_SCHEME_DEFAULT
+    }
+    apply_css_to_display(crate::theme::base_css());
+    let current_accent = load_saved_accent();
+    apply_accent_color(&current_accent);
+}
+
+unsafe extern "C" fn on_theme_swatch_light_toggled(btn: *mut c_void, _u: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(bindings) => bindings,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(btn) == 0 {
+        return;
+    }
+    let mgr = (b.adw_style_manager_get_default)();
+    if !mgr.is_null() {
+        (b.adw_style_manager_set_color_scheme)(mgr, 1); // ADW_COLOR_SCHEME_FORCE_LIGHT
+    }
+    apply_css_to_display(crate::theme::base_css());
+    let current_accent = load_saved_accent();
+    apply_accent_color(&current_accent);
+}
+
+unsafe extern "C" fn on_theme_swatch_nord_toggled(btn: *mut c_void, _u: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(bindings) => bindings,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(btn) == 0 {
+        return;
+    }
+    let mgr = (b.adw_style_manager_get_default)();
+    if !mgr.is_null() {
+        (b.adw_style_manager_set_color_scheme)(mgr, 4); // ADW_COLOR_SCHEME_FORCE_DARK
+    }
+    apply_css_to_display(crate::theme::base_css());
+    apply_accent_color("#88C0D0");
+    let nord_scale = ACTIVE_NORD_SCALE.load(Ordering::SeqCst);
+    if !nord_scale.is_null() {
+        (b.gtk_range_set_value)(nord_scale, 8.0);
+    }
+    let lbl_nord = ACTIVE_NORD_DESC_LABEL.load(Ordering::SeqCst);
+    if !lbl_nord.is_null() {
+        let text = CString::new("Nord Palette: Nord 8 (Frost Cyan) #88C0D0").unwrap();
+        (b.gtk_label_set_text)(lbl_nord, text.as_ptr());
+    }
+}
+
+unsafe extern "C" fn on_theme_swatch_dark_toggled(btn: *mut c_void, _u: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(bindings) => bindings,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(btn) == 0 {
+        return;
+    }
+    let mgr = (b.adw_style_manager_get_default)();
+    if !mgr.is_null() {
+        (b.adw_style_manager_set_color_scheme)(mgr, 4); // ADW_COLOR_SCHEME_FORCE_DARK
+    }
+    apply_css_to_display(crate::theme::base_css());
+    let current_accent = load_saved_accent();
+    apply_accent_color(&current_accent);
+}
+
+unsafe extern "C" fn on_btn_action_new_tab(_btn: *mut c_void, _u: *mut c_void) {
+    create_new_tab("about:blank", true);
+}
+
+unsafe extern "C" fn on_btn_action_new_incognito(_btn: *mut c_void, _u: *mut c_void) {
+    let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("vingilot-ui"));
+    let _ = std::process::Command::new(exe).arg("--incognito").spawn();
+}
+
+unsafe extern "C" fn on_btn_action_history(_btn: *mut c_void, _u: *mut c_void) {
+    on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_btn_action_bookmarks(_btn: *mut c_void, _u: *mut c_void) {
+    on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_btn_action_find(_btn: *mut c_void, _u: *mut c_void) {
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+    if !entry.is_null() {
+        if let Some(b) = BINDINGS.get() {
+            (b.gtk_widget_grab_focus)(entry);
+        }
+    }
+}
+
+unsafe extern "C" fn on_btn_action_preferences(_btn: *mut c_void, _u: *mut c_void) {
+    on_preferences_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_btn_action_shortcuts(_btn: *mut c_void, _u: *mut c_void) {
+    show_keyboard_shortcuts_dialog();
+}
+
+unsafe extern "C" fn on_btn_action_about(_btn: *mut c_void, _u: *mut c_void) {
+    on_about_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+// GActions callbacks
+unsafe extern "C" fn on_action_new_tab(_action: *mut c_void, _param: *mut c_void, _u: *mut c_void) {
+    create_new_tab("about:blank", true);
+}
+
+unsafe extern "C" fn on_action_new_incognito(
+    _action: *mut c_void,
+    _param: *mut c_void,
+    _u: *mut c_void,
+) {
+    let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("vingilot-ui"));
+    let _ = std::process::Command::new(exe).arg("--incognito").spawn();
+}
+
+unsafe extern "C" fn on_action_history(_action: *mut c_void, _param: *mut c_void, _u: *mut c_void) {
+    on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_action_bookmarks(
+    _action: *mut c_void,
+    _param: *mut c_void,
+    _u: *mut c_void,
+) {
+    on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_action_find(_action: *mut c_void, _param: *mut c_void, _u: *mut c_void) {
+    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
+    if !entry.is_null() {
+        if let Some(b) = BINDINGS.get() {
+            (b.gtk_widget_grab_focus)(entry);
+        }
+    }
+}
+
+unsafe extern "C" fn on_action_preferences(
+    _action: *mut c_void,
+    _param: *mut c_void,
+    _u: *mut c_void,
+) {
+    on_preferences_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe extern "C" fn on_action_shortcuts(
+    _action: *mut c_void,
+    _param: *mut c_void,
+    _u: *mut c_void,
+) {
+    show_keyboard_shortcuts_dialog();
+}
+
+unsafe extern "C" fn on_action_about(_action: *mut c_void, _param: *mut c_void, _u: *mut c_void) {
+    on_about_clicked(std::ptr::null_mut(), std::ptr::null_mut());
+}
+
+unsafe fn show_keyboard_shortcuts_dialog() {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let parent = ACTIVE_WINDOW.load(Ordering::SeqCst);
+
+    let win = (b.adw_preferences_window_new)();
+    if !parent.is_null() {
+        (b.gtk_window_set_transient_for)(win, parent);
+        (b.gtk_window_set_modal)(win, 1);
+    }
+    (b.gtk_window_set_title)(
+        win,
+        CString::new("Keyboard Shortcuts").unwrap().as_ptr(),
+    );
+    (b.gtk_window_set_default_size)(win, 600, 520);
+
+    let page = (b.adw_preferences_page_new)();
+    (b.adw_preferences_page_set_title)(
+        page,
+        CString::new("Shortcuts").unwrap().as_ptr(),
+    );
+    (b.adw_preferences_page_set_icon_name)(
+        page,
+        CString::new("input-keyboard-symbolic").unwrap().as_ptr(),
+    );
+
+    let add_row = |grp: *mut c_void, title: &str, accel: &str| {
+        let row = (b.adw_action_row_new)();
+        (b.adw_preferences_row_set_title)(row, CString::new(title).unwrap().as_ptr());
+        (b.adw_action_row_set_subtitle)(row, CString::new(accel).unwrap().as_ptr());
+        (b.adw_preferences_group_add)(grp, row);
+    };
+
+    let grp_tabs = (b.adw_preferences_group_new)();
+    (b.adw_preferences_group_set_title)(
+        grp_tabs,
+        CString::new("Tabs & Windows").unwrap().as_ptr(),
+    );
+    add_row(grp_tabs, "New Tab", "Ctrl+T");
+    add_row(grp_tabs, "Close Current Tab", "Ctrl+W");
+    add_row(grp_tabs, "Reopen Recently Closed Tab", "Ctrl+Shift+T");
+    add_row(grp_tabs, "New Incognito Window", "Ctrl+Shift+N / Ctrl+Shift+P");
+    (b.adw_preferences_page_add)(page, grp_tabs);
+
+    let grp_nav = (b.adw_preferences_group_new)();
+    (b.adw_preferences_group_set_title)(
+        grp_nav,
+        CString::new("Navigation & Search").unwrap().as_ptr(),
+    );
+    add_row(grp_nav, "Reload Page", "Ctrl+R");
+    add_row(grp_nav, "Stop Loading", "Escape");
+    add_row(grp_nav, "Focus Address Bar", "Ctrl+L");
+    add_row(grp_nav, "Find in Page / Search", "Ctrl+F");
+    add_row(grp_nav, "History & Start Page", "Ctrl+H");
+    add_row(grp_nav, "Bookmarks Manager", "Ctrl+Shift+O");
+    add_row(grp_nav, "Bookmark Current Page", "Ctrl+D");
+    (b.adw_preferences_page_add)(page, grp_nav);
+
+    let grp_app = (b.adw_preferences_group_new)();
+    (b.adw_preferences_group_set_title)(
+        grp_app,
+        CString::new("Application & System").unwrap().as_ptr(),
+    );
+    add_row(grp_app, "Preferences", "Ctrl+,");
+    add_row(grp_app, "Keyboard Shortcuts", "Ctrl+?");
+    (b.adw_preferences_page_add)(page, grp_app);
+
+    (b.adw_preferences_window_add)(win, page);
+    (b.gtk_window_present)(win);
+}
+
+unsafe fn make_menu_action_row(
+    b: &GtkBindings,
+    icon_name: &str,
+    title: &str,
+    shortcut: &str,
+) -> *mut c_void {
+    let btn = (b.gtk_button_new)();
+    (b.gtk_button_set_has_frame)(btn, 0);
+    (b.gtk_widget_add_css_class)(btn, CString::new("menu-action-row").unwrap().as_ptr());
+    (b.gtk_widget_set_hexpand)(btn, 1);
+
+    let hbox = (b.gtk_box_new)(0, 10);
+    (b.gtk_widget_set_hexpand)(hbox, 1);
+
+    if !icon_name.is_empty() {
+        let img = (b.gtk_image_new_from_icon_name)(CString::new(icon_name).unwrap().as_ptr());
+        (b.gtk_image_set_pixel_size)(img, 18);
+        (b.gtk_box_append)(hbox, img);
+    }
+
+    let lbl_title = (b.gtk_label_new)(CString::new(title).unwrap().as_ptr());
+    (b.gtk_label_set_xalign)(lbl_title, 0.0);
+    (b.gtk_widget_set_hexpand)(lbl_title, 1);
+    (b.gtk_box_append)(hbox, lbl_title);
+
+    if !shortcut.is_empty() {
+        let lbl_shortcut = (b.gtk_label_new)(CString::new(shortcut).unwrap().as_ptr());
+        (b.gtk_label_set_xalign)(lbl_shortcut, 1.0);
+        (b.gtk_widget_add_css_class)(
+            lbl_shortcut,
+            CString::new("dim-label").unwrap().as_ptr(),
+        );
+        (b.gtk_box_append)(hbox, lbl_shortcut);
+    }
+
+    (b.gtk_button_set_child)(btn, hbox);
+    btn
+}
+
+unsafe fn register_action_with_accel(
+    b: &GtkBindings,
+    app: *mut c_void,
+    name: &str,
+    accels: &[&str],
+    callback: unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+) {
+    let c_name = CString::new(name).unwrap();
+    let action = (b.g_simple_action_new)(c_name.as_ptr(), std::ptr::null_mut());
+    if !action.is_null() {
+        let activate_sig = CString::new("activate").unwrap();
+        let cb = std::mem::transmute::<
+            unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void),
+            GCallback,
+        >(callback);
+        (b.g_signal_connect_data)(
+            action,
+            activate_sig.as_ptr(),
+            cb,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        );
+        (b.g_action_map_add_action)(app, action);
+
+        if !accels.is_empty() {
+            let c_accels: Vec<CString> =
+                accels.iter().map(|s| CString::new(*s).unwrap()).collect();
+            let mut ptrs: Vec<*const c_char> = c_accels.iter().map(|c| c.as_ptr()).collect();
+            ptrs.push(std::ptr::null());
+            let full_name = format!("app.{}", name);
+            let c_full_name = CString::new(full_name).unwrap();
+            (b.gtk_application_set_accels_for_action)(
+                app,
+                c_full_name.as_ptr(),
+                ptrs.as_ptr(),
+            );
+        }
+    }
 }
 
 unsafe fn make_switch_row(
@@ -7357,6 +7722,28 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 
     println!("[Vingilot] GApplication activate signal received - initializing Adwaita window");
 
+    // Register application actions with keyboard accelerators
+    register_action_with_accel(b, app, "new-tab", &["<Primary>t"], on_action_new_tab);
+    register_action_with_accel(
+        b,
+        app,
+        "new-incognito",
+        &["<Primary><Shift>n", "<Primary><Shift>p"],
+        on_action_new_incognito,
+    );
+    register_action_with_accel(b, app, "history", &["<Primary>h"], on_action_history);
+    register_action_with_accel(b, app, "bookmarks", &["<Primary><Shift>o"], on_action_bookmarks);
+    register_action_with_accel(b, app, "find", &["<Primary>f"], on_action_find);
+    register_action_with_accel(b, app, "preferences", &["<Primary>comma"], on_action_preferences);
+    register_action_with_accel(
+        b,
+        app,
+        "shortcuts",
+        &["<Primary>question", "<Primary>slash"],
+        on_action_shortcuts,
+    );
+    register_action_with_accel(b, app, "about", &[], on_action_about);
+
     let win = (b.adw_application_window_new)(app);
     let is_incognito = IS_INCOGNITO.load(Ordering::SeqCst);
 
@@ -7996,42 +8383,56 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     let panel_vbox = (b.gtk_box_new)(1, 8); // Vertical layout for options
     (b.gtk_widget_set_margin_bottom)(panel_vbox, 16);
 
-    // Quick Action Buttons Row
-    let quick_card = make_group_card(b, "⚡ Quick Actions");
-    let quick_box = (b.gtk_box_new)(1, 4);
-    let btn_side_new_tab =
-        (b.gtk_button_new_with_label)(CString::new("➕  New Tab").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_side_new_tab, 0);
-    let btn_side_new_incognito =
-        (b.gtk_button_new_with_label)(CString::new("🌊  New Incognito Window").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_side_new_incognito, 0);
-    let btn_side_history =
-        (b.gtk_button_new_with_label)(CString::new("🕒  History & Bookmarks").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_side_history, 0);
-    let btn_side_about =
-        (b.gtk_button_new_with_label)(CString::new("ℹ  About Vingilot").unwrap().as_ptr());
-    (b.gtk_button_set_has_frame)(btn_side_about, 0);
+    // Action Items & Chrome-Style Shortcuts
+    let quick_card = make_group_card(b, "⚡ Browser Actions");
+    let quick_box = (b.gtk_box_new)(1, 2);
 
-    (b.gtk_box_append)(quick_box, btn_side_new_tab);
-    (b.gtk_box_append)(quick_box, btn_side_new_incognito);
-    (b.gtk_box_append)(quick_box, btn_side_history);
-    (b.gtk_box_append)(quick_box, btn_side_about);
+    let btn_action_new_tab = make_menu_action_row(b, "tab-new-symbolic", "New Tab", "Ctrl+T");
+    let btn_action_new_incognito =
+        make_menu_action_row(b, "view-conceal-symbolic", "New Incognito Window", "Ctrl+Shift+N");
+    (b.gtk_box_append)(quick_box, btn_action_new_tab);
+    (b.gtk_box_append)(quick_box, btn_action_new_incognito);
+
+    let sep1 = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep1, 4);
+    (b.gtk_widget_set_margin_bottom)(sep1, 4);
+    (b.gtk_box_append)(quick_box, sep1);
+
+    let btn_action_history =
+        make_menu_action_row(b, "document-open-recent-symbolic", "History", "Ctrl+H");
+    let btn_action_bookmarks =
+        make_menu_action_row(b, "user-bookmarks-symbolic", "Bookmarks", "Ctrl+Shift+O");
+    let btn_action_find =
+        make_menu_action_row(b, "edit-find-symbolic", "Find in Page", "Ctrl+F");
+    (b.gtk_box_append)(quick_box, btn_action_history);
+    (b.gtk_box_append)(quick_box, btn_action_bookmarks);
+    (b.gtk_box_append)(quick_box, btn_action_find);
+
+    let sep2 = (b.gtk_separator_new)(0);
+    (b.gtk_widget_set_margin_top)(sep2, 4);
+    (b.gtk_widget_set_margin_bottom)(sep2, 4);
+    (b.gtk_box_append)(quick_box, sep2);
+
+    let btn_action_prefs =
+        make_menu_action_row(b, "preferences-system-symbolic", "Preferences", "Ctrl+,");
+    let btn_action_shortcuts =
+        make_menu_action_row(b, "input-keyboard-symbolic", "Keyboard Shortcuts", "Ctrl+?");
+    let btn_action_about =
+        make_menu_action_row(b, "help-about-symbolic", "About Vingilot", "");
+    (b.gtk_box_append)(quick_box, btn_action_prefs);
+    (b.gtk_box_append)(quick_box, btn_action_shortcuts);
+    (b.gtk_box_append)(quick_box, btn_action_about);
+
     (b.gtk_box_append)(quick_card, quick_box);
     (b.gtk_box_append)(panel_vbox, quick_card);
 
-    // Group 1: Search Engines Preferences
-    let card_search = make_group_card(b, "🔍 Search Engines Preferences");
-    let lbl_search_desc = (b.gtk_label_new)(
-        CString::new("Quick switch default search engine:")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_label_set_xalign)(lbl_search_desc, 0.0);
-    (b.gtk_box_append)(card_search, lbl_search_desc);
-
+    // Group 1: Search Engines Preferences (Icon-Only Linked Bar)
+    let card_search = make_group_card(b, "🔍 Search Engine Provider");
     let search_btns_box = (b.gtk_box_new)(0, 0);
     (b.gtk_widget_add_css_class)(search_btns_box, CString::new("linked").unwrap().as_ptr());
     (b.gtk_widget_set_hexpand)(search_btns_box, 1);
+    (b.gtk_widget_set_margin_top)(search_btns_box, 4);
+    (b.gtk_widget_set_margin_bottom)(search_btns_box, 4);
 
     let make_search_toggle = |icon_name: &str, tooltip: &str| -> *mut c_void {
         let btn = (b.gtk_toggle_button_new)();
@@ -8040,7 +8441,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         (b.gtk_button_set_child)(btn, img);
         (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
         (b.gtk_widget_add_css_class)(btn, CString::new("flat").unwrap().as_ptr());
-        (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
         (b.gtk_widget_set_hexpand)(btn, 1);
         btn
     };
@@ -8084,33 +8484,64 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(panel_vbox, card_search);
 
     // Group 2: Theming
-    let card_theme = make_group_card(b, "🎨 Theming");
+    let card_theme = make_group_card(b, "🎨 Theming & Appearance");
     let lbl_theme_desc = (b.gtk_label_new)(
-        CString::new("Color scheme and display themes:")
+        CString::new("Color scheme swatches:")
             .unwrap()
             .as_ptr(),
     );
     (b.gtk_label_set_xalign)(lbl_theme_desc, 0.0);
     (b.gtk_box_append)(card_theme, lbl_theme_desc);
 
-    let theme_box1 = (b.gtk_box_new)(0, 4);
-    let btn_theme_sys = (b.gtk_button_new_with_label)(CString::new("System").unwrap().as_ptr());
-    let btn_theme_light = (b.gtk_button_new_with_label)(CString::new("Light").unwrap().as_ptr());
-    let btn_theme_dark = (b.gtk_button_new_with_label)(CString::new("Dark").unwrap().as_ptr());
-    let btn_theme_black =
-        (b.gtk_button_new_with_label)(CString::new("True Black").unwrap().as_ptr());
-    (b.gtk_box_append)(theme_box1, btn_theme_sys);
-    (b.gtk_box_append)(theme_box1, btn_theme_light);
-    (b.gtk_box_append)(theme_box1, btn_theme_dark);
-    (b.gtk_box_append)(theme_box1, btn_theme_black);
-    (b.gtk_box_append)(card_theme, theme_box1);
+    // Circular Theme Swatches: System, Light, Custom/Nord, Dark
+    let make_swatch_button = |class_name: &str, tooltip: &str| -> *mut c_void {
+        let btn = (b.gtk_toggle_button_new)();
+        (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new("theme-swatch").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new(class_name).unwrap().as_ptr());
+        (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
+        (b.gtk_button_set_has_frame)(btn, 0);
 
-    let btn_theme_incog = (b.gtk_button_new_with_label)(
-        CString::new("🌊 Ocean Deep Incognito (#062640)")
-            .unwrap()
-            .as_ptr(),
-    );
-    (b.gtk_box_append)(card_theme, btn_theme_incog);
+        let img = (b.gtk_image_new_from_icon_name)(
+            CString::new("object-select-symbolic").unwrap().as_ptr(),
+        );
+        (b.gtk_image_set_pixel_size)(img, 16);
+        (b.gtk_button_set_child)(btn, img);
+        btn
+    };
+
+    let btn_swatch_sys = make_swatch_button("theme-swatch-system", "System Appearance (Auto)");
+    let btn_swatch_light = make_swatch_button("theme-swatch-light", "Light Appearance");
+    let btn_swatch_nord = make_swatch_button("theme-swatch-nord", "Custom / Nord Frost Appearance");
+    let btn_swatch_dark = make_swatch_button("theme-swatch-dark", "Dark Appearance");
+
+    (b.gtk_toggle_button_set_group)(btn_swatch_light, btn_swatch_sys);
+    (b.gtk_toggle_button_set_group)(btn_swatch_nord, btn_swatch_sys);
+    (b.gtk_toggle_button_set_group)(btn_swatch_dark, btn_swatch_sys);
+
+    let style_mgr = (b.adw_style_manager_get_default)();
+    let current_scheme = if !style_mgr.is_null() {
+        (b.adw_style_manager_get_color_scheme)(style_mgr)
+    } else {
+        0
+    };
+    if current_scheme == 1 {
+        (b.gtk_toggle_button_set_active)(btn_swatch_light, 1);
+    } else if current_scheme == 4 {
+        (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
+    } else {
+        (b.gtk_toggle_button_set_active)(btn_swatch_sys, 1);
+    }
+
+    let swatches_box = (b.gtk_box_new)(0, 10);
+    (b.gtk_widget_set_halign)(swatches_box, 3); // GTK_ALIGN_CENTER
+    (b.gtk_widget_set_margin_top)(swatches_box, 6);
+    (b.gtk_widget_set_margin_bottom)(swatches_box, 10);
+    (b.gtk_box_append)(swatches_box, btn_swatch_sys);
+    (b.gtk_box_append)(swatches_box, btn_swatch_light);
+    (b.gtk_box_append)(swatches_box, btn_swatch_nord);
+    (b.gtk_box_append)(swatches_box, btn_swatch_dark);
+    (b.gtk_box_append)(card_theme, swatches_box);
 
     // Accent Hue Slider
     let lbl_hue = (b.gtk_label_new)(CString::new("Continuous Accent Hue: 210° (#1f80e0)").unwrap().as_ptr());
@@ -8304,13 +8735,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         on_entry_activate,
     );
 
-    let cb_new_tab = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_new_tab_clicked,
-    );
-    let cb_new_incognito = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_new_incognito_clicked);
     let cb_zoom_out = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
@@ -8322,12 +8746,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
     >(on_zoom_reset_clicked);
-    let cb_history = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_history_clicked,
-    );
-    let cb_about = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
-        on_about_clicked,
-    );
 
     let cb_toggle_menu = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
@@ -8354,26 +8772,55 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         GCallback,
     >(on_nord_slider_changed);
 
-    let cb_theme_sys = std::mem::transmute::<
+    let cb_action_new_tab = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_theme_system_clicked);
-    let cb_theme_light = std::mem::transmute::<
+    >(on_btn_action_new_tab);
+    let cb_action_new_incognito = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_theme_light_clicked);
-    let cb_theme_dark = std::mem::transmute::<
+    >(on_btn_action_new_incognito);
+    let cb_action_history = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_theme_dark_clicked);
-    let cb_theme_black = std::mem::transmute::<
+    >(on_btn_action_history);
+    let cb_action_bookmarks = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_theme_true_black_clicked);
-    let cb_theme_incog = std::mem::transmute::<
+    >(on_btn_action_bookmarks);
+    let cb_action_find = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_theme_incognito_blue_clicked);
+    >(on_btn_action_find);
+    let cb_action_prefs = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_btn_action_preferences);
+    let cb_action_shortcuts = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_btn_action_shortcuts);
+    let cb_action_about = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_btn_action_about);
+
+    let cb_swatch_sys = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_swatch_system_toggled);
+    let cb_swatch_light = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_swatch_light_toggled);
+    let cb_swatch_nord = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_swatch_nord_toggled);
+    let cb_swatch_dark = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_swatch_dark_toggled);
 
     // Menu toggle and close signals
     (b.g_signal_connect_data)(
@@ -8393,35 +8840,67 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Quick action signals in side menu
+    // Chrome-style action items signals in side menu
     (b.g_signal_connect_data)(
-        btn_side_new_tab,
+        btn_action_new_tab,
         clicked_sig.as_ptr(),
-        cb_new_tab,
+        cb_action_new_tab,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_side_new_incognito,
+        btn_action_new_incognito,
         clicked_sig.as_ptr(),
-        cb_new_incognito,
+        cb_action_new_incognito,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_side_history,
+        btn_action_history,
         clicked_sig.as_ptr(),
-        cb_history,
+        cb_action_history,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_side_about,
+        btn_action_bookmarks,
         clicked_sig.as_ptr(),
-        cb_about,
+        cb_action_bookmarks,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_action_find,
+        clicked_sig.as_ptr(),
+        cb_action_find,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_action_prefs,
+        clicked_sig.as_ptr(),
+        cb_action_prefs,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_action_shortcuts,
+        clicked_sig.as_ptr(),
+        cb_action_shortcuts,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        btn_action_about,
+        clicked_sig.as_ptr(),
+        cb_action_about,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
@@ -8489,43 +8968,35 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Theme signals in side menu
+    // Theme swatches signals in side menu
     (b.g_signal_connect_data)(
-        btn_theme_sys,
-        clicked_sig.as_ptr(),
-        cb_theme_sys,
+        btn_swatch_sys,
+        toggled_sig.as_ptr(),
+        cb_swatch_sys,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_theme_light,
-        clicked_sig.as_ptr(),
-        cb_theme_light,
+        btn_swatch_light,
+        toggled_sig.as_ptr(),
+        cb_swatch_light,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_theme_dark,
-        clicked_sig.as_ptr(),
-        cb_theme_dark,
+        btn_swatch_nord,
+        toggled_sig.as_ptr(),
+        cb_swatch_nord,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_theme_black,
-        clicked_sig.as_ptr(),
-        cb_theme_black,
-        std::ptr::null_mut(),
-        std::ptr::null_mut(),
-        0,
-    );
-    (b.g_signal_connect_data)(
-        btn_theme_incog,
-        clicked_sig.as_ptr(),
-        cb_theme_incog,
+        btn_swatch_dark,
+        toggled_sig.as_ptr(),
+        cb_swatch_dark,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
