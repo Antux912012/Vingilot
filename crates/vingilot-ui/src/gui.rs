@@ -4657,8 +4657,54 @@ unsafe extern "C" fn on_preferences_clicked(_button: *mut c_void, _user_data: *m
         CString::new("llama3.2:latest").unwrap().as_ptr(),
     );
     (b.adw_preferences_group_add)(grp_ai, row_ai_model);
-
     (b.adw_preferences_page_add)(page_priv, grp_ai);
+
+    let grp_dist = (b.adw_preferences_group_new)();
+    (b.adw_preferences_group_set_title)(
+        grp_dist,
+        CString::new("Updates & Official Distribution").unwrap().as_ptr(),
+    );
+
+    let row_dist = (b.adw_action_row_new)();
+    (b.adw_preferences_row_set_title)(
+        row_dist,
+        CString::new("Supported Linux Packaging").unwrap().as_ptr(),
+    );
+    (b.adw_action_row_set_subtitle)(
+        row_dist,
+        CString::new("Distributed exclusively in Flatpak, Debian (.deb), and standalone AppImage")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.adw_preferences_group_add)(grp_dist, row_dist);
+
+    let row_arda = (b.adw_action_row_new)();
+    (b.adw_preferences_row_set_title)(
+        row_arda,
+        CString::new("Arda Tech Ecosystem").unwrap().as_ptr(),
+    );
+    (b.adw_action_row_set_subtitle)(
+        row_arda,
+        CString::new("https://antux912012.github.io/arda-tech/ — News, projects & tech hub")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.adw_preferences_group_add)(grp_dist, row_arda);
+
+    let row_gh = (b.adw_action_row_new)();
+    (b.adw_preferences_row_set_title)(
+        row_gh,
+        CString::new("Source Code & Release Updates").unwrap().as_ptr(),
+    );
+    (b.adw_action_row_set_subtitle)(
+        row_gh,
+        CString::new("https://github.com/Antux912012/Vingilot — Star and watch for latest releases")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.adw_preferences_group_add)(grp_dist, row_gh);
+
+    (b.adw_preferences_page_add)(page_priv, grp_dist);
     (b.adw_preferences_window_add)(prefs, page_priv);
 
     (b.gtk_window_present)(prefs);
@@ -4695,11 +4741,16 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
     );
     (b.adw_about_dialog_set_comments)(
         dialog,
-        CString::new("Modern, privacy-first web browser powered by Libadwaita, WebKitGTK 6.0, and hardware-accelerated Vulkan & Wayland rendering.").unwrap().as_ptr(),
+        CString::new(
+            "Modern, privacy-first web browser powered by Libadwaita, WebKitGTK 6.0, and hardware-accelerated Vulkan & Wayland rendering.\n\n\
+             Ecosystem & Tech Hub:\nhttps://antux912012.github.io/arda-tech/\n\n\
+             Source Code & Release Updates:\nhttps://github.com/Antux912012/Vingilot\n\n\
+             Official Distribution Formats:\nDistributed exclusively in Flatpak, Debian (.deb), and standalone AppImage."
+        ).unwrap().as_ptr(),
     );
     (b.adw_about_dialog_set_website)(
         dialog,
-        CString::new("https://github.com/Antux912012/Vingilot")
+        CString::new("https://antux912012.github.io/arda-tech/")
             .unwrap()
             .as_ptr(),
     );
@@ -7792,6 +7843,14 @@ unsafe extern "C" fn on_profile_delete_button_clicked(
     switch_profile("standard");
 }
 
+unsafe extern "C" fn on_open_ardatech_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    navigate_to_url("https://antux912012.github.io/arda-tech/");
+}
+
+unsafe extern "C" fn on_open_github_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    navigate_to_url("https://github.com/Antux912012/Vingilot");
+}
+
 unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     let scrolled = (b.gtk_scrolled_window_new)();
     (b.gtk_scrolled_window_set_policy)(scrolled, 2, 1); // H=Never (2), V=Automatic (1)
@@ -7813,8 +7872,14 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     (b.gtk_widget_set_margin_bottom)(container, 48);
 
     // Section 1: Hero & Search
-    let hero_box = (b.gtk_box_new)(1, 14);
+    let hero_box = (b.gtk_box_new)(1, 10);
     (b.gtk_widget_set_halign)(hero_box, 3); // GTK_ALIGN_CENTER
+
+    let logo_img = (b.gtk_image_new_from_icon_name)(
+        CString::new("io.github.antux912012.Vingilot").unwrap().as_ptr(),
+    );
+    (b.gtk_image_set_pixel_size)(logo_img, 72);
+    (b.gtk_box_append)(hero_box, logo_img);
 
     let logo_lbl = (b.gtk_label_new)(CString::new("Vingilot").unwrap().as_ptr());
     (b.gtk_widget_add_css_class)(logo_lbl, CString::new("start-page-logo").unwrap().as_ptr());
@@ -8019,6 +8084,76 @@ unsafe fn build_start_page_widget(b: &GtkBindings) -> *mut c_void {
     (b.gtk_box_append)(bm_section, bookmarks_flow);
 
     (b.gtk_box_append)(container, bm_section);
+
+    // Section 4: Footer - Ecosystem, Distribution & Updates
+    let footer_box = (b.gtk_box_new)(0, 16);
+    (b.gtk_widget_set_halign)(footer_box, 3); // GTK_ALIGN_CENTER
+    (b.gtk_widget_set_margin_top)(footer_box, 24);
+    (b.gtk_widget_set_margin_bottom)(footer_box, 16);
+
+    let btn_arda = (b.gtk_button_new_with_label)(
+        CString::new("🌐 Arda Tech Hub").unwrap().as_ptr(),
+    );
+    (b.gtk_button_set_has_frame)(btn_arda, 0);
+    (b.gtk_widget_add_css_class)(btn_arda, CString::new("dim-label").unwrap().as_ptr());
+    (b.gtk_widget_set_tooltip_text)(
+        btn_arda,
+        CString::new("Visit the Arda Tech Ecosystem (https://antux912012.github.io/arda-tech/)")
+            .unwrap()
+            .as_ptr(),
+    );
+    let cb_arda = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_open_ardatech_clicked,
+    );
+    (b.g_signal_connect_data)(
+        btn_arda,
+        clicked_sig.as_ptr(),
+        cb_arda,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.gtk_box_append)(footer_box, btn_arda);
+
+    let lbl_sep1 = (b.gtk_label_new)(CString::new("•").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(lbl_sep1, CString::new("dim-label").unwrap().as_ptr());
+    (b.gtk_box_append)(footer_box, lbl_sep1);
+
+    let lbl_dist = (b.gtk_label_new)(
+        CString::new("Official Distribution: Flatpak · .deb · AppImage").unwrap().as_ptr(),
+    );
+    (b.gtk_widget_add_css_class)(lbl_dist, CString::new("dim-label").unwrap().as_ptr());
+    (b.gtk_box_append)(footer_box, lbl_dist);
+
+    let lbl_sep2 = (b.gtk_label_new)(CString::new("•").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(lbl_sep2, CString::new("dim-label").unwrap().as_ptr());
+    (b.gtk_box_append)(footer_box, lbl_sep2);
+
+    let btn_gh = (b.gtk_button_new_with_label)(
+        CString::new("⭐ GitHub & Releases").unwrap().as_ptr(),
+    );
+    (b.gtk_button_set_has_frame)(btn_gh, 0);
+    (b.gtk_widget_add_css_class)(btn_gh, CString::new("dim-label").unwrap().as_ptr());
+    (b.gtk_widget_set_tooltip_text)(
+        btn_gh,
+        CString::new("View source code, issues, and latest releases on GitHub (https://github.com/Antux912012/Vingilot)")
+            .unwrap()
+            .as_ptr(),
+    );
+    let cb_gh = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_open_github_clicked,
+    );
+    (b.g_signal_connect_data)(
+        btn_gh,
+        clicked_sig.as_ptr(),
+        cb_gh,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.gtk_box_append)(footer_box, btn_gh);
+
+    (b.gtk_box_append)(container, footer_box);
 
     (b.gtk_scrolled_window_set_child)(scrolled, container);
     scrolled

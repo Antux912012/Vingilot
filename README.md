@@ -10,6 +10,8 @@
 </p>
 
 <p align="center">
+  <a href="https://antux912012.github.io/arda-tech/"><img src="https://img.shields.io/badge/Ecosystem-Arda%20Tech-teal.svg" alt="Arda Tech"></a>
+  <a href="https://github.com/Antux912012/Vingilot"><img src="https://img.shields.io/badge/GitHub-Vingilot%20Updates-black.svg?logo=github" alt="GitHub"></a>
   <a href="#-distribution-packages"><img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Wayland-blue.svg" alt="Platform"></a>
   <a href="#1-flatpak-bundle"><img src="https://img.shields.io/badge/Flatpak-Supported-blue.svg" alt="Flatpak"></a>
   <a href="#2-debian--ubuntu-package-deb"><img src="https://img.shields.io/badge/Debian%20%2F%20Ubuntu-.deb-red.svg" alt="Debian"></a>
@@ -19,6 +21,8 @@
 </p>
 
 **Vingilot** is a modern, lightweight, and privacy-focused web browser built with **Libadwaita (GTK4)** and **WebKitGTK 6.0**, optimized for native **Wayland** compositing and hardware-accelerated **Vulkan/OpenGL** rendering.
+
+Part of the **[Arda Tech Ecosystem](https://antux912012.github.io/arda-tech/)**, Vingilot is distributed **exclusively** in three universal Linux formats: **Flatpak**, **Debian (.deb)**, and **AppImage**. For news, release updates, and documentation, visit [Arda Tech](https://antux912012.github.io/arda-tech/) and the [GitHub Project](https://github.com/Antux912012/Vingilot).
 
 ---
 
@@ -152,6 +156,14 @@ Vingilot/
 ├── data/                  # Desktop file, metainfo XML, Papirus icons
 └── docs/                  # Architecture and development documentation
 ```
+
+---
+
+## 🌐 Arda Tech Ecosystem & Updates
+
+- **Official Website & Tech Hub**: [Arda Tech Hub](https://antux912012.github.io/arda-tech/) — Explore related projects, articles, and documentation.
+- **GitHub Repository**: [Antux912012/Vingilot](https://github.com/Antux912012/Vingilot) — Source code, issue tracker, release notes, and latest downloads.
+- **Exclusive Distribution Formats**: Vingilot is distributed **exclusively** via Flatpak, Debian packages (`.deb`), and standalone AppImage binaries.
 
 ---
 
