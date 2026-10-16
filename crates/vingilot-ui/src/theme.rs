@@ -80,6 +80,34 @@ pub fn base_css() -> &'static str {
         border: 1px solid alpha(white, 0.08);
     }
 
+    /* Target the main popup menu container */
+    .vingilot-menu, 
+    popover.menu, 
+    .popup-container,
+    popover.vingilot-menu,
+    popover.vingilot-menu > contents,
+    popover.menu > contents,
+    .popup-container > contents,
+    .vingilot-menu > contents {
+        background-color: rgba(30, 35, 45, 0.75) !important; /* Adjust alpha for desired transparency */
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+        border-radius: 14px;
+    }
+
+    popover.vingilot-menu > arrow,
+    .vingilot-menu > arrow {
+        background-color: rgba(30, 35, 45, 0.75) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .vingilot-menu-box {
+        background-color: transparent !important;
+        background: transparent !important;
+    }
+
     headerbar {
         background-color: @headerbar_bg_color;
         border-bottom: none;
@@ -249,65 +277,97 @@ pub fn base_css() -> &'static str {
         margin-top: 4px;
     }
 
-    /* Circular Theme Swatches */
+    /* Container for top circles */
+    .vingilot-top-selectors {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px;
+    }
+
+    /* Base style for all selector circles */
+    .vingilot-selector-circle,
+    button.vingilot-selector-circle,
     button.theme-swatch {
-        min-width: 34px;
-        min-height: 34px;
-        border-radius: 9999px;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.2) !important;
+        cursor: pointer;
         padding: 0;
-        margin: 0 4px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-        transition: transform 120ms ease, box-shadow 120ms ease;
+        margin: 0 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s ease, border-color 0.2s ease;
     }
+
+    .vingilot-selector-circle:hover,
+    button.vingilot-selector-circle:hover,
     button.theme-swatch:hover {
-        transform: scale(1.08);
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        transform: scale(1.1);
+        border-color: #1f80e0 !important;
     }
+
+    button.vingilot-selector-circle:checked,
     button.theme-swatch:checked {
-        outline: 2px solid @accent_color;
+        outline: 2px solid #1f80e0;
         outline-offset: 2px;
+        border-color: #1f80e0 !important;
     }
+
+    button.vingilot-selector-circle image,
     button.theme-swatch image {
         opacity: 0;
         transition: opacity 120ms ease;
     }
+    button.vingilot-selector-circle:checked image,
     button.theme-swatch:checked image {
         opacity: 1;
     }
 
-    /* System Swatch: Split circle (linear-gradient 45deg: white 50%, #2E3440 50%) */
+    /* 1. Half White and Half Black (Auto / Dynamic) */
+    .vingilot-selector-circle:nth-child(1),
     button.theme-swatch-system {
-        background: linear-gradient(45deg, #ffffff 50%, #2E3440 50%) !important;
-        border: 1px solid alpha(currentColor, 0.25) !important;
+        background: linear-gradient(90deg, #ffffff 50%, #000000 50%) !important;
     }
+    .vingilot-selector-circle:nth-child(1):checked image,
     button.theme-swatch-system:checked image {
-        color: #3584e4 !important;
+        color: #1f80e0 !important;
+        -gtk-icon-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
     }
 
-    /* Light Swatch: White circle */
+    /* 2. White (Light Mode) */
+    .vingilot-selector-circle:nth-child(2),
     button.theme-swatch-light {
+        background-color: #ffffff !important;
         background: #ffffff !important;
-        border: 1px solid rgba(0, 0, 0, 0.25) !important;
     }
+    .vingilot-selector-circle:nth-child(2):checked image,
     button.theme-swatch-light:checked image {
-        color: #2E3440 !important;
+        color: #121212 !important;
     }
 
-    /* Custom / Nord Swatch: Cream / Nord Frost circle */
-    button.theme-swatch-nord {
-        background: linear-gradient(135deg, #88C0D0 50%, #81A1C1 50%) !important;
-        border: 1px solid alpha(currentColor, 0.25) !important;
-    }
-    button.theme-swatch-nord:checked image {
-        color: #2E3440 !important;
-    }
-
-    /* Dark Swatch: Dark circle (#2E3440) */
+    /* 3. Black (Dark Mode Neutral) */
+    .vingilot-selector-circle:nth-child(3),
     button.theme-swatch-dark {
-        background: #2E3440 !important;
-        border: 1px solid rgba(255, 255, 255, 0.25) !important;
+        background-color: #1e1e1e !important;
+        background: #1e1e1e !important;
     }
+    .vingilot-selector-circle:nth-child(3):checked image,
     button.theme-swatch-dark:checked image {
+        color: #ffffff !important;
+    }
+
+    /* 4. True Black (OLED) */
+    .vingilot-selector-circle:nth-child(4),
+    button.theme-swatch-true-black {
+        background-color: #000000 !important;
+        background: #000000 !important;
+        border-color: rgba(255, 255, 255, 0.4) !important; /* Ensures visibility against dark background */
+    }
+    .vingilot-selector-circle:nth-child(4):checked image,
+    button.theme-swatch-true-black:checked image {
         color: #ffffff !important;
     }
 
@@ -696,4 +756,33 @@ mod tests {
         assert!(css.contains("#2E3440")); // Nord 0
         assert!(css.contains("#BF616A")); // Aurora Red
     }
+
+    #[test]
+    fn test_menu_transparency_and_backdrop_blur_css() {
+        let css = base_css();
+        assert!(css.contains(".vingilot-menu"));
+        assert!(css.contains("popover.menu"));
+        assert!(css.contains("rgba(30, 35, 45, 0.75) !important"));
+        assert!(css.contains("backdrop-filter: blur(20px) saturate(180%)"));
+        assert!(css.contains("-webkit-backdrop-filter: blur(20px) saturate(180%)"));
+        assert!(css.contains("border: 1px solid rgba(255, 255, 255, 0.1)"));
+        assert!(css.contains("box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5)"));
+    }
+
+    #[test]
+    fn test_top_selector_circles_css() {
+        let css = base_css();
+        assert!(css.contains(".vingilot-top-selectors"));
+        assert!(css.contains(".vingilot-selector-circle"));
+        // Circle 1: Split 50/50 white and black
+        assert!(css.contains("linear-gradient(90deg, #ffffff 50%, #000000 50%)"));
+        // Circle 2: Solid white
+        assert!(css.contains("#ffffff !important"));
+        // Circle 3: Dark neutral
+        assert!(css.contains("#1e1e1e !important"));
+        // Circle 4: True black with visible border
+        assert!(css.contains("#000000 !important"));
+        assert!(css.contains("border-color: rgba(255, 255, 255, 0.4) !important"));
+    }
 }
+

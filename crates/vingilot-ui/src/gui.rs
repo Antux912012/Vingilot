@@ -5047,6 +5047,7 @@ unsafe extern "C" fn on_theme_swatch_light_toggled(btn: *mut c_void, _u: *mut c_
     apply_accent_color(&current_accent);
 }
 
+#[allow(dead_code)]
 unsafe extern "C" fn on_theme_swatch_nord_toggled(btn: *mut c_void, _u: *mut c_void) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
@@ -5093,6 +5094,27 @@ unsafe extern "C" fn on_theme_swatch_dark_toggled(btn: *mut c_void, _u: *mut c_v
     }
     save_theme_scheme("dark");
     apply_css_to_display(crate::theme::base_css());
+    let current_accent = load_saved_accent();
+    apply_accent_color(&current_accent);
+}
+
+unsafe extern "C" fn on_theme_swatch_true_black_toggled(btn: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
+    let b = match BINDINGS.get() {
+        Some(bindings) => bindings,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(btn) == 0 {
+        return;
+    }
+    let mgr = (b.adw_style_manager_get_default)();
+    if !mgr.is_null() {
+        (b.adw_style_manager_set_color_scheme)(mgr, 4); // ADW_COLOR_SCHEME_FORCE_DARK
+    }
+    save_theme_scheme("true-black");
+    apply_css_to_display(crate::theme::AppTheme::TrueBlack.custom_css().unwrap_or(""));
     let current_accent = load_saved_accent();
     apply_accent_color(&current_accent);
 }
@@ -8298,7 +8320,13 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
                 "light" => {
                     (b.adw_style_manager_set_color_scheme)(style_mgr, 1);
                 }
-                "nord" | "dark" => {
+                "dark" => {
+                    (b.adw_style_manager_set_color_scheme)(style_mgr, 4);
+                }
+                "true-black" => {
+                    (b.adw_style_manager_set_color_scheme)(style_mgr, 4);
+                }
+                "nord" => {
                     (b.adw_style_manager_set_color_scheme)(style_mgr, 4);
                 }
                 _ => {
@@ -8308,6 +8336,8 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         }
         if saved_scheme == "nord" {
             apply_css_to_display(crate::theme::nord_css());
+        } else if saved_scheme == "true-black" {
+            apply_css_to_display(crate::theme::AppTheme::TrueBlack.custom_css().unwrap_or(""));
         }
     }
 
@@ -8885,20 +8915,24 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     // -------------------------------------------------------------
     let popover = (b.gtk_popover_new)();
     ACTIVE_POPOVER.store(popover, Ordering::SeqCst);
+    (b.gtk_widget_add_css_class)(popover, CString::new("vingilot-menu").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(popover, CString::new("popup-container").unwrap().as_ptr());
     (b.gtk_menu_button_set_popover)(menu_btn, popover);
 
     let popover_box = (b.gtk_box_new)(1, 6); // 1 = GTK_ORIENTATION_VERTICAL
+    (b.gtk_widget_add_css_class)(popover_box, CString::new("vingilot-menu-box").unwrap().as_ptr());
     (b.gtk_widget_set_size_request)(popover_box, 300, -1);
     (b.gtk_widget_set_margin_start)(popover_box, 8);
     (b.gtk_widget_set_margin_end)(popover_box, 8);
     (b.gtk_widget_set_margin_top)(popover_box, 8);
     (b.gtk_widget_set_margin_bottom)(popover_box, 8);
 
-    // 1. Circular Theme Swatches: System, Light, Custom/Nord, Dark
+    // 1. Top Selector Circles: Auto/Split (1), Light Mode (2), Dark Mode (3), True Black / OLED (4)
     let make_swatch_button = |class_name: &str, tooltip: &str| -> *mut c_void {
         let btn = (b.gtk_toggle_button_new)();
         (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
         (b.gtk_widget_add_css_class)(btn, CString::new("theme-swatch").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new("vingilot-selector-circle").unwrap().as_ptr());
         (b.gtk_widget_add_css_class)(btn, CString::new(class_name).unwrap().as_ptr());
         (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
         (b.gtk_button_set_has_frame)(btn, 0);
@@ -8906,33 +8940,33 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         let img = (b.gtk_image_new_from_icon_name)(
             CString::new("object-select-symbolic").unwrap().as_ptr(),
         );
-        (b.gtk_image_set_pixel_size)(img, 16);
+        (b.gtk_image_set_pixel_size)(img, 14);
         (b.gtk_button_set_child)(btn, img);
         btn
     };
 
-    let btn_swatch_sys = make_swatch_button("theme-swatch-system", "System Appearance (Auto)");
-    let btn_swatch_light = make_swatch_button("theme-swatch-light", "Light Appearance");
-    let btn_swatch_nord = make_swatch_button("theme-swatch-nord", "Custom / Nord Frost Appearance");
-    let btn_swatch_dark = make_swatch_button("theme-swatch-dark", "Dark Appearance");
+    let btn_swatch_sys = make_swatch_button("theme-swatch-system", "Auto / Dynamic Mode (Split)");
+    let btn_swatch_light = make_swatch_button("theme-swatch-light", "Light Mode (#ffffff)");
+    let btn_swatch_dark = make_swatch_button("theme-swatch-dark", "Dark Mode (#1e1e1e)");
+    let btn_swatch_black = make_swatch_button("theme-swatch-true-black", "True Black / OLED (#000000)");
 
     (b.gtk_toggle_button_set_group)(btn_swatch_light, btn_swatch_sys);
-    (b.gtk_toggle_button_set_group)(btn_swatch_nord, btn_swatch_sys);
     (b.gtk_toggle_button_set_group)(btn_swatch_dark, btn_swatch_sys);
+    (b.gtk_toggle_button_set_group)(btn_swatch_black, btn_swatch_sys);
 
     if is_incognito {
-        (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
+        (b.gtk_toggle_button_set_active)(btn_swatch_black, 1);
     } else {
         let saved_scheme = load_theme_scheme();
         match saved_scheme.as_str() {
             "light" => {
                 (b.gtk_toggle_button_set_active)(btn_swatch_light, 1);
             }
-            "nord" => {
-                (b.gtk_toggle_button_set_active)(btn_swatch_nord, 1);
-            }
             "dark" => {
                 (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
+            }
+            "true-black" => {
+                (b.gtk_toggle_button_set_active)(btn_swatch_black, 1);
             }
             _ => {
                 (b.gtk_toggle_button_set_active)(btn_swatch_sys, 1);
@@ -8941,13 +8975,14 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     }
 
     let swatches_box = (b.gtk_box_new)(0, 10);
+    (b.gtk_widget_add_css_class)(swatches_box, CString::new("vingilot-top-selectors").unwrap().as_ptr());
     (b.gtk_widget_set_halign)(swatches_box, 3); // GTK_ALIGN_CENTER
     (b.gtk_widget_set_margin_top)(swatches_box, 2);
     (b.gtk_widget_set_margin_bottom)(swatches_box, 6);
     (b.gtk_box_append)(swatches_box, btn_swatch_sys);
     (b.gtk_box_append)(swatches_box, btn_swatch_light);
-    (b.gtk_box_append)(swatches_box, btn_swatch_nord);
     (b.gtk_box_append)(swatches_box, btn_swatch_dark);
+    (b.gtk_box_append)(swatches_box, btn_swatch_black);
     (b.gtk_box_append)(popover_box, swatches_box);
 
     if is_incognito {
@@ -9233,14 +9268,14 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
     >(on_theme_swatch_light_toggled);
-    let cb_swatch_nord = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_theme_swatch_nord_toggled);
     let cb_swatch_dark = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
     >(on_theme_swatch_dark_toggled);
+    let cb_swatch_black = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_theme_swatch_true_black_toggled);
 
     // Chrome-style action items signals in popover menu
     (b.g_signal_connect_data)(
@@ -9388,17 +9423,17 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
     (b.g_signal_connect_data)(
-        btn_swatch_nord,
+        btn_swatch_dark,
         toggled_sig.as_ptr(),
-        cb_swatch_nord,
+        cb_swatch_dark,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
-        btn_swatch_dark,
+        btn_swatch_black,
         toggled_sig.as_ptr(),
-        cb_swatch_dark,
+        cb_swatch_black,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
