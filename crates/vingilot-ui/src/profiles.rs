@@ -73,12 +73,7 @@ impl BrowserProfile {
 
 /// Resolves the default profiles configuration file path.
 pub fn default_profiles_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("vingilot")
-        .join("profiles.json")
+    vingilot_core::previews::default_data_dir().join("profiles.json")
 }
 
 /// In-memory manager and file persistence for profiles.json.
@@ -241,11 +236,7 @@ impl ProfileStorage {
 
 /// Resolves standard profile storage paths.
 pub fn get_profile_data_dirs(profile_id: &str) -> (PathBuf, PathBuf) {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let base = PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("vingilot")
+    let base = vingilot_core::previews::default_data_dir()
         .join("profiles")
         .join(profile_id);
     let data_dir = base.join("data");
@@ -315,5 +306,28 @@ mod tests {
         assert!(reloaded.get_profile("study").is_some());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_xdg_data_dir_resolution() {
+        let original_xdg = std::env::var("XDG_DATA_HOME").ok();
+        let test_dir = std::env::temp_dir().join(format!("vingilot-xdg-test-{}", uuid::Uuid::new_v4()));
+        std::env::set_var("XDG_DATA_HOME", &test_dir);
+
+        let p_path = default_profiles_path();
+        assert_eq!(p_path, test_dir.join("vingilot").join("profiles.json"));
+
+        let (data_dir, cache_dir) = get_profile_data_dirs("test-profile");
+        assert_eq!(data_dir, test_dir.join("vingilot").join("profiles").join("test-profile").join("data"));
+        assert_eq!(cache_dir, test_dir.join("vingilot").join("profiles").join("test-profile").join("cache"));
+        assert!(data_dir.exists());
+        assert!(cache_dir.exists());
+
+        if let Some(orig) = original_xdg {
+            std::env::set_var("XDG_DATA_HOME", orig);
+        } else {
+            std::env::remove_var("XDG_DATA_HOME");
+        }
+        let _ = fs::remove_dir_all(&test_dir);
     }
 }

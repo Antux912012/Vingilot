@@ -231,66 +231,103 @@ impl TabManager {
         true
     }
 
-    /// Closes all tabs except `keep_index`.
+    /// Closes all tabs belonging to the same profile as `keep_index`, preserving tabs from other profiles.
     pub fn close_other_tabs(&mut self, keep_index: usize) -> bool {
         if keep_index >= self.tabs.len() {
             return false;
         }
-        let keep_tab = self.tabs.remove(keep_index);
+        let keep_id = self.tabs[keep_index].id;
+        let target_profile_id = self.tabs[keep_index].profile_id.clone();
 
+        let mut remaining_tabs = Vec::new();
         for tab in self.tabs.drain(..) {
-            if !tab.is_incognito
-                && tab.profile_id != "guest"
-                && tab.profile_id != "high-security"
-                && !tab.url.is_empty()
-                && tab.url != "about:blank"
-            {
-                self.closed_tabs.push(ClosedTab {
-                    url: tab.url,
-                    title: tab.title,
-                    is_pinned: tab.is_pinned,
-                    profile_id: tab.profile_id,
-                });
+            if tab.id == keep_id || tab.profile_id != target_profile_id {
+                remaining_tabs.push(tab);
+            } else {
+                if !tab.is_incognito
+                    && tab.profile_id != "guest"
+                    && tab.profile_id != "high-security"
+                    && !tab.url.is_empty()
+                    && tab.url != "about:blank"
+                {
+                    self.closed_tabs.push(ClosedTab {
+                        url: tab.url,
+                        title: tab.title,
+                        is_pinned: tab.is_pinned,
+                        profile_id: tab.profile_id,
+                    });
+                }
             }
         }
 
-        self.tabs.push(keep_tab);
-        self.active_index = 0;
+        self.tabs = remaining_tabs;
+        if let Some(new_idx) = self.tabs.iter().position(|t| t.id == keep_id) {
+            self.active_index = new_idx;
+        } else if self.active_index >= self.tabs.len() {
+            self.active_index = self.tabs.len().saturating_sub(1);
+        }
         true
     }
 
-    /// Closes all tabs to the right of `from_index`.
+    /// Closes all tabs to the right of `from_index` belonging to the same profile, preserving tabs from other profiles.
     pub fn close_tabs_to_right(&mut self, from_index: usize) -> bool {
         if from_index >= self.tabs.len() {
             return false;
         }
+        let from_id = self.tabs[from_index].id;
+        let target_profile_id = self.tabs[from_index].profile_id.clone();
 
-        let to_remove: Vec<_> = self.tabs.drain(from_index + 1..).collect();
-        for tab in to_remove {
-            if !tab.is_incognito
-                && tab.profile_id != "guest"
-                && tab.profile_id != "high-security"
-                && !tab.url.is_empty()
-                && tab.url != "about:blank"
-            {
-                self.closed_tabs.push(ClosedTab {
-                    url: tab.url,
-                    title: tab.title,
-                    is_pinned: tab.is_pinned,
-                    profile_id: tab.profile_id,
-                });
+        let mut remaining_tabs = Vec::new();
+        let mut past_from = false;
+
+        for tab in self.tabs.drain(..) {
+            if !past_from {
+                if tab.id == from_id {
+                    past_from = true;
+                }
+                remaining_tabs.push(tab);
+            } else {
+                if tab.profile_id == target_profile_id {
+                    if !tab.is_incognito
+                        && tab.profile_id != "guest"
+                        && tab.profile_id != "high-security"
+                        && !tab.url.is_empty()
+                        && tab.url != "about:blank"
+                    {
+                        self.closed_tabs.push(ClosedTab {
+                            url: tab.url,
+                            title: tab.title,
+                            is_pinned: tab.is_pinned,
+                            profile_id: tab.profile_id,
+                        });
+                    }
+                } else {
+                    remaining_tabs.push(tab);
+                }
             }
         }
 
+        self.tabs = remaining_tabs;
         if self.active_index >= self.tabs.len() {
-            self.active_index = self.tabs.len() - 1;
+            self.active_index = self.tabs.len().saturating_sub(1);
         }
         true
     }
 
-    /// Reopens the most recently closed tab.
-    pub fn reopen_closed_tab(&mut self) -> Option<Uuid> {
-        let closed = self.closed_tabs.pop()?;
+    /// Reopens the most recently closed tab matching `profile_id` (or falls back to the last closed tab).
+    pub fn reopen_closed_tab_for_profile(&mut self, profile_id: &str) -> Option<Uuid> {
+        let idx = self
+            .closed_tabs
+            .iter()
+            .rposition(|t| t.profile_id == profile_id)
+            .or_else(|| {
+                if !self.closed_tabs.is_empty() {
+                    Some(self.closed_tabs.len() - 1)
+                } else {
+                    None
+                }
+            })?;
+        let closed = self.closed_tabs.remove(idx);
         let mut tab = Tab::new_with_profile(false, &closed.profile_id);
         tab.url = closed.url.clone();
         tab.title = closed.title.clone();
@@ -300,6 +337,15 @@ impl TabManager {
         self.tabs.push(tab);
         self.active_index = self.tabs.len() - 1;
         Some(id)
+    }
+
+    /// Reopens the most recently closed tab (scoped to active tab's profile if available).
+    pub fn reopen_closed_tab(&mut self) -> Option<Uuid> {
+        let active_prof = self
+            .active_tab()
+            .map(|t| t.profile_id.clone())
+            .unwrap_or_else(|| "standard".to_string());
+        self.reopen_closed_tab_for_profile(&active_prof)
     }
 
     /// Sets muted state on a tab.
@@ -616,5 +662,49 @@ mod tests {
         assert!(!mgr.closed_tabs().iter().any(|c| c.url.contains("guest")));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_profile_scoped_tab_closures_and_reopen() {
+        let mut mgr = TabManager::new();
+        // Tab 0: Standard (keep)
+        mgr.active_tab_mut().unwrap().url = "https://standard-0.com".to_string();
+        // Tab 1: Work
+        mgr.new_tab_for_profile("work");
+        mgr.active_tab_mut().unwrap().url = "https://work-1.com".to_string();
+        // Tab 2: Standard
+        mgr.new_tab_for_profile("standard");
+        mgr.active_tab_mut().unwrap().url = "https://standard-2.com".to_string();
+        // Tab 3: Standard
+        mgr.new_tab_for_profile("standard");
+        mgr.active_tab_mut().unwrap().url = "https://standard-3.com".to_string();
+        // Tab 4: Work
+        mgr.new_tab_for_profile("work");
+        mgr.active_tab_mut().unwrap().url = "https://work-4.com".to_string();
+
+        assert_eq!(mgr.tabs().len(), 5);
+
+        // Close tabs to right from Tab 2 (Standard):
+        // Tab 3 (Standard) should close, but Tab 4 (Work) must remain!
+        assert!(mgr.close_tabs_to_right(2));
+        assert_eq!(mgr.tabs().len(), 4);
+        assert_eq!(mgr.tabs()[0].url, "https://standard-0.com");
+        assert_eq!(mgr.tabs()[1].url, "https://work-1.com");
+        assert_eq!(mgr.tabs()[2].url, "https://standard-2.com");
+        assert_eq!(mgr.tabs()[3].url, "https://work-4.com");
+
+        // Close other tabs keeping Tab 0 (Standard):
+        // Tab 2 (Standard) should close, but Tab 1 (Work) and Tab 3 (Work) must remain!
+        assert!(mgr.close_other_tabs(0));
+        assert_eq!(mgr.tabs().len(), 3);
+        assert_eq!(mgr.tabs()[0].url, "https://standard-0.com");
+        assert_eq!(mgr.tabs()[1].url, "https://work-1.com");
+        assert_eq!(mgr.tabs()[2].url, "https://work-4.com");
+
+        // Reopen closed tab for standard profile:
+        let reopened = mgr.reopen_closed_tab_for_profile("standard");
+        assert!(reopened.is_some());
+        assert_eq!(mgr.active_tab().unwrap().profile_id, "standard");
+        assert_eq!(mgr.active_tab().unwrap().url, "https://standard-2.com");
     }
 }

@@ -196,6 +196,59 @@ pub fn base_css() -> &'static str {
         border: 1px solid alpha(currentColor, 0.06);
     }
 
+    /* Sliders styling: Hue continuous spectrum and Nord palette */
+    .hue-slider trough {
+        background-image: linear-gradient(to right,
+            #ff0000 0%,
+            #ffff00 17%,
+            #00ff00 33%,
+            #00ffff 50%,
+            #0000ff 67%,
+            #ff00ff 83%,
+            #ff0000 100%
+        );
+        min-height: 12px;
+        border-radius: 6px;
+        border: 1px solid alpha(currentColor, 0.18);
+    }
+    .hue-slider highlight {
+        background: transparent;
+    }
+    .hue-slider slider {
+        min-width: 18px;
+        min-height: 18px;
+        margin: -3px 0;
+        border-radius: 9999px;
+    }
+
+    .nord-slider trough,
+    .scale-has-marks-below contents trough {
+        background-image: linear-gradient(to right,
+            #2E3440 0%, #4C566A 25%,
+            #D8DEE9 26%, #ECEFF4 43%,
+            #8FBCBB 44%, #5E81AC 68%,
+            #BF616A 69%, #B48EAD 100%
+        );
+        min-height: 12px;
+        border-radius: 6px;
+        border: 1px solid alpha(currentColor, 0.18);
+    }
+    .nord-slider highlight {
+        background: transparent;
+    }
+    .nord-slider slider {
+        min-width: 18px;
+        min-height: 18px;
+        margin: -3px 0;
+        border-radius: 9999px;
+    }
+    .nord-slider marks,
+    .scale-has-marks-below marks {
+        font-size: 10px;
+        color: alpha(currentColor, 0.7);
+        margin-top: 4px;
+    }
+
     /* Start Page Styling */
     .start-page-container {
         padding: 32px 24px;
@@ -474,5 +527,15 @@ mod tests {
         assert!(css.contains(".zen-tab-close-badge"));
         assert!(css.contains(".tab-overlay-container:hover .zen-tab-close-badge"));
         assert!(css.contains("opacity: 1"));
+    }
+
+    #[test]
+    fn test_hue_and_nord_slider_css() {
+        let css = base_css();
+        assert!(css.contains(".hue-slider trough"));
+        assert!(css.contains(".nord-slider trough"));
+        assert!(css.contains(".scale-has-marks-below contents trough"));
+        assert!(css.contains("#2E3440")); // Nord 0
+        assert!(css.contains("#BF616A")); // Aurora Red
     }
 }

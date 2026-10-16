@@ -49,6 +49,16 @@ modules:
       - install -Dm644 data/icons/hicolor/symbolic/apps/io.github.antux912012.Vingilot-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.antux912012.Vingilot-symbolic.svg
       - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-hamburger-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-hamburger-symbolic.svg
       - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-incognito-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-incognito-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-search-ddg-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-search-ddg-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-search-google-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-search-google-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-search-brave-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-search-brave-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-search-bing-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-search-bing-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/vingilot-search-ecosia-symbolic.svg /app/share/icons/hicolor/symbolic/apps/vingilot-search-ecosia-symbolic.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/search-engine-duckduckgo.svg /app/share/icons/hicolor/symbolic/apps/search-engine-duckduckgo.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/search-engine-google.svg /app/share/icons/hicolor/symbolic/apps/search-engine-google.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/search-engine-brave.svg /app/share/icons/hicolor/symbolic/apps/search-engine-brave.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/search-engine-bing.svg /app/share/icons/hicolor/symbolic/apps/search-engine-bing.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/search-engine-ecosia.svg /app/share/icons/hicolor/symbolic/apps/search-engine-ecosia.svg
     sources:
       - type: dir
         path: ..

@@ -28,6 +28,10 @@ static ACTIVE_AI_BASE_URL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::nu
 static ACTIVE_AI_MODEL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_AI_API_KEY_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_AI_STATUS_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_HUE_DESC_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_NORD_DESC_LABEL: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_HUE_SCALE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_NORD_SCALE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static SIDEBAR_COLLAPSED: AtomicBool = AtomicBool::new(false);
 const MIN_COLLAPSED_SIDEBAR_WIDTH: i32 = 62;
 static TAB_MANAGER: Mutex<Option<crate::tabs::TabManager>> = Mutex::new(None);
@@ -93,10 +97,21 @@ static ACTIVE_BM_EDIT_NAME_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::n
 static ACTIVE_BM_EDIT_URL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 
 fn get_session_file_path() -> Option<std::path::PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let config_dir = std::path::PathBuf::from(home)
-        .join(".config")
-        .join("vingilot");
+    let config_base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.trim().is_empty() {
+            Some(std::path::PathBuf::from(xdg))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .or_else(|| {
+        std::env::var("HOME")
+            .ok()
+            .map(|h| std::path::PathBuf::from(h).join(".config"))
+    })?;
+    let config_dir = config_base.join("vingilot");
     let _ = std::fs::create_dir_all(&config_dir);
     Some(config_dir.join("session.json"))
 }
@@ -280,6 +295,26 @@ struct GtkBindings {
     gtk_css_provider_load_from_string: unsafe extern "C" fn(*mut c_void, *const c_char),
     gtk_style_context_add_provider_for_display:
         unsafe extern "C" fn(*mut c_void, *mut c_void, libc::c_uint),
+    gtk_toggle_button_new: unsafe extern "C" fn() -> *mut c_void,
+    gtk_toggle_button_new_with_label: unsafe extern "C" fn(*const c_char) -> *mut c_void,
+    gtk_toggle_button_set_active: unsafe extern "C" fn(*mut c_void, libc::c_int),
+    gtk_toggle_button_get_active: unsafe extern "C" fn(*mut c_void) -> libc::c_int,
+    gtk_toggle_button_set_group: unsafe extern "C" fn(*mut c_void, *mut c_void),
+    gtk_scale_new_with_range: unsafe extern "C" fn(
+        libc::c_int,
+        libc::c_double,
+        libc::c_double,
+        libc::c_double,
+    ) -> *mut c_void,
+    gtk_scale_add_mark: unsafe extern "C" fn(
+        *mut c_void,
+        libc::c_double,
+        libc::c_int,
+        *const c_char,
+    ),
+    gtk_scale_set_draw_value: unsafe extern "C" fn(*mut c_void, libc::c_int),
+    gtk_range_get_value: unsafe extern "C" fn(*mut c_void) -> libc::c_double,
+    gtk_range_set_value: unsafe extern "C" fn(*mut c_void, libc::c_double),
 
     // WebKitGTK
     webkit_web_view_new: unsafe extern "C" fn() -> *mut c_void,
@@ -642,6 +677,16 @@ unsafe fn load_bindings() -> Option<GtkBindings> {
             libgtk,
             "gtk_style_context_add_provider_for_display",
         )?,
+        gtk_toggle_button_new: load_symbol(libgtk, "gtk_toggle_button_new")?,
+        gtk_toggle_button_new_with_label: load_symbol(libgtk, "gtk_toggle_button_new_with_label")?,
+        gtk_toggle_button_set_active: load_symbol(libgtk, "gtk_toggle_button_set_active")?,
+        gtk_toggle_button_get_active: load_symbol(libgtk, "gtk_toggle_button_get_active")?,
+        gtk_toggle_button_set_group: load_symbol(libgtk, "gtk_toggle_button_set_group")?,
+        gtk_scale_new_with_range: load_symbol(libgtk, "gtk_scale_new_with_range")?,
+        gtk_scale_add_mark: load_symbol(libgtk, "gtk_scale_add_mark")?,
+        gtk_scale_set_draw_value: load_symbol(libgtk, "gtk_scale_set_draw_value")?,
+        gtk_range_get_value: load_symbol(libgtk, "gtk_range_get_value")?,
+        gtk_range_set_value: load_symbol(libgtk, "gtk_range_set_value")?,
 
         webkit_web_view_new: load_symbol(libwebkit, "webkit_web_view_new")?,
         webkit_web_view_load_uri: load_symbol(libwebkit, "webkit_web_view_load_uri")?,
@@ -932,12 +977,15 @@ unsafe extern "C" fn on_webview_loading_notify(
     _pspec: *mut c_void,
     _user_data: *mut c_void,
 ) {
+    if webview.is_null() || webview != ACTIVE_WEBVIEW.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
     let btn_ref = ACTIVE_REFRESH_BTN.load(Ordering::SeqCst);
-    if btn_ref.is_null() || webview.is_null() {
+    if btn_ref.is_null() {
         return;
     }
     let is_loading = (b.webkit_web_view_is_loading)(webview);
@@ -1709,10 +1757,34 @@ unsafe extern "C" fn on_tab_ctx_close_others(_button: *mut c_void, user_data: *m
             (b.gtk_popover_popdown)(popover);
         }
     }
+    let mut url_to_load = None;
+    let mut is_start = false;
+    let active_prof = get_active_browser_profile();
     if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
         if let Some(mgr) = mgr_guard.as_mut() {
             mgr.close_other_tabs(idx);
+            let has_profile_tab = mgr.tabs().iter().any(|t| t.profile_id == active_prof.id);
+            if !has_profile_tab {
+                mgr.new_tab_for_profile(&active_prof.id);
+            }
+            if let Some(tab) = mgr.active_tab() {
+                if tab.profile_id != active_prof.id {
+                    if let Some(pos) = mgr.tabs().iter().position(|t| t.profile_id == active_prof.id) {
+                        mgr.switch_tab(pos);
+                    }
+                }
+            }
+            if let Some(tab) = mgr.active_tab() {
+                is_start =
+                    tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
+                url_to_load = Some(tab.url.clone());
+            }
         }
+    }
+    if is_start {
+        switch_to_start_page();
+    } else if let Some(url) = url_to_load {
+        navigate_to_url(&url);
     }
     refresh_sidebar_tabs();
 }
@@ -1725,10 +1797,34 @@ unsafe extern "C" fn on_tab_ctx_close_right(_button: *mut c_void, user_data: *mu
             (b.gtk_popover_popdown)(popover);
         }
     }
+    let mut url_to_load = None;
+    let mut is_start = false;
+    let active_prof = get_active_browser_profile();
     if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
         if let Some(mgr) = mgr_guard.as_mut() {
             mgr.close_tabs_to_right(idx);
+            let has_profile_tab = mgr.tabs().iter().any(|t| t.profile_id == active_prof.id);
+            if !has_profile_tab {
+                mgr.new_tab_for_profile(&active_prof.id);
+            }
+            if let Some(tab) = mgr.active_tab() {
+                if tab.profile_id != active_prof.id {
+                    if let Some(pos) = mgr.tabs().iter().position(|t| t.profile_id == active_prof.id) {
+                        mgr.switch_tab(pos);
+                    }
+                }
+            }
+            if let Some(tab) = mgr.active_tab() {
+                is_start =
+                    tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
+                url_to_load = Some(tab.url.clone());
+            }
         }
+    }
+    if is_start {
+        switch_to_start_page();
+    } else if let Some(url) = url_to_load {
+        navigate_to_url(&url);
     }
     refresh_sidebar_tabs();
 }
@@ -3060,7 +3156,7 @@ unsafe extern "C" fn on_window_key_pressed(
         }
 
         if keyval == 0x68 || keyval == 0x48 {
-            switch_to_start_page();
+            on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
             return 1;
         }
     }
@@ -3237,6 +3333,9 @@ unsafe extern "C" fn on_webview_favicon_notify(
     _pspec: *mut c_void,
     _user_data: *mut c_void,
 ) {
+    if webview.is_null() || webview != ACTIVE_WEBVIEW.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -3265,6 +3364,9 @@ unsafe extern "C" fn on_webview_load_changed(
     _load_event: libc::c_int,
     _user_data: *mut c_void,
 ) {
+    if webview.is_null() || webview != ACTIVE_WEBVIEW.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -3293,6 +3395,9 @@ unsafe extern "C" fn on_webview_title_notify(
     _pspec: *mut c_void,
     _user_data: *mut c_void,
 ) {
+    if webview.is_null() || webview != ACTIVE_WEBVIEW.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -3528,6 +3633,9 @@ unsafe extern "C" fn on_webview_uri_notify(
     _pspec: *mut c_void,
     _user_data: *mut c_void,
 ) {
+    if webview.is_null() || webview != ACTIVE_WEBVIEW.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -3536,14 +3644,17 @@ unsafe extern "C" fn on_webview_uri_notify(
     let uri_ptr = (b.webkit_web_view_get_uri)(webview);
     if !uri_ptr.is_null() {
         let uri_str = CStr::from_ptr(uri_ptr).to_string_lossy().to_string();
-        if !entry.is_null() {
+        let is_start = uri_str.is_empty() || uri_str == "about:blank" || uri_str == "browser://start";
+        if !entry.is_null() && !is_start {
             (b.gtk_editable_set_text)(entry, uri_ptr);
         }
         if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
             if let Some(mgr) = mgr_guard.as_mut() {
                 if let Some(active) = mgr.active_tab_mut() {
                     active.url = uri_str.clone();
-                    active.is_start_page = false;
+                    if !is_start {
+                        active.is_start_page = false;
+                    }
                 }
             }
         }
@@ -4113,7 +4224,8 @@ unsafe extern "C" fn on_new_incognito_clicked(_button: *mut c_void, _user_data: 
             (b.gtk_popover_popdown)(popover);
         }
     }
-    let _ = std::process::Command::new("vingilot-ui")
+    let exe = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("vingilot-ui"));
+    let _ = std::process::Command::new(exe)
         .arg("--incognito")
         .spawn();
 }
@@ -4216,18 +4328,7 @@ unsafe extern "C" fn on_history_clicked(_button: *mut c_void, _user_data: *mut c
             (b.gtk_popover_popdown)(popover);
         }
     }
-    let webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
-    let entry = ACTIVE_ENTRY.load(Ordering::SeqCst);
-    if webview.is_null() {
-        return;
-    }
-    if let Some(b) = BINDINGS.get() {
-        let uri = CString::new("https://html.duckduckgo.com").unwrap();
-        (b.webkit_web_view_load_uri)(webview, uri.as_ptr());
-        if !entry.is_null() {
-            (b.gtk_editable_set_text)(entry, uri.as_ptr());
-        }
-    }
+    on_home_clicked(std::ptr::null_mut(), std::ptr::null_mut());
 }
 
 #[allow(dead_code)]
@@ -4634,20 +4735,90 @@ unsafe fn apply_css_to_display(css: &str) {
     }
 }
 
+unsafe fn set_default_search_engine(name: &str, search_url: &str, homepage: &str) {
+    if let Ok(db_guard) = BROWSER_DB.lock() {
+        if let Some(db) = db_guard.as_ref() {
+            let sm = SearchEngineManager::new(db);
+            if let Ok(engines) = sm.list_all() {
+                if let Some(engine) = engines.iter().find(|e| e.name.to_lowercase().contains(&name.to_lowercase())) {
+                    let _ = sm.set_default(engine.id);
+                } else {
+                    let now = chrono::Utc::now();
+                    let engine = vingilot_core::models::SearchEngine {
+                        id: uuid::Uuid::new_v4(),
+                        name: name.to_string(),
+                        search_url: search_url.to_string(),
+                        shortcut: None,
+                        is_default: true,
+                        created_at: now,
+                    };
+                    let repo = vingilot_core::repositories::SearchEngineRepository::new(db);
+                    let _ = repo.insert(&engine);
+                    let _ = repo.set_default(engine.id);
+                }
+            }
+        }
+    }
+
+    let placeholder = format!("Search with {}", name);
+    if let Ok(mut model_guard) = START_PAGE_MODEL.lock() {
+        if let Some(model) = model_guard.as_mut() {
+            model.search_engine_name = name.to_string();
+            model.search_placeholder = placeholder.clone();
+            model.default_search_url = search_url.to_string();
+        }
+    }
+
+    let search_entry = ACTIVE_START_PAGE_SEARCH.load(Ordering::SeqCst);
+    if !search_entry.is_null() {
+        if let Some(b) = BINDINGS.get() {
+            if let Ok(c_place) = CString::new(placeholder) {
+                (b.gtk_entry_set_placeholder_text)(search_entry, c_place.as_ptr());
+            }
+        }
+    }
+
+    let is_start = {
+        let mgr_guard = TAB_MANAGER.lock().ok();
+        mgr_guard
+            .as_ref()
+            .and_then(|g| g.as_ref())
+            .and_then(|m| m.active_tab())
+            .map(|t| t.is_start_page || t.url == "about:blank" || t.url == "browser://start")
+            .unwrap_or(false)
+    };
+
+    if is_start {
+        queue_refresh_start_page();
+    } else {
+        navigate_to_url(homepage);
+    }
+}
+
+#[allow(dead_code)]
+unsafe fn set_preferred_search_engine(name: &str, search_url: &str, homepage: &str) {
+    set_default_search_engine(name, search_url, homepage);
+}
+
+#[allow(dead_code)]
 unsafe extern "C" fn on_search_ddg_clicked(_b: *mut c_void, _u: *mut c_void) {
-    navigate_to_url("https://duckduckgo.com");
+    set_default_search_engine("DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_search_google_clicked(_b: *mut c_void, _u: *mut c_void) {
-    navigate_to_url("https://www.google.com");
+    set_default_search_engine("Google", "https://www.google.com/search?q=%s", "https://www.google.com");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_search_brave_clicked(_b: *mut c_void, _u: *mut c_void) {
-    navigate_to_url("https://search.brave.com");
+    set_default_search_engine("Brave", "https://search.brave.com/search?q=%s", "https://search.brave.com");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_search_bing_clicked(_b: *mut c_void, _u: *mut c_void) {
-    navigate_to_url("https://www.bing.com");
+    set_default_search_engine("Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com");
 }
+#[allow(dead_code)]
 unsafe extern "C" fn on_search_ecosia_clicked(_b: *mut c_void, _u: *mut c_void) {
-    navigate_to_url("https://www.ecosia.org");
+    set_default_search_engine("Ecosia", "https://www.ecosia.org/search?q=%s", "https://www.ecosia.org");
 }
 
 unsafe extern "C" fn on_theme_system_clicked(_b: *mut c_void, _u: *mut c_void) {
@@ -5544,6 +5715,60 @@ unsafe extern "C" fn on_script_message_accent_changed(
     }
 }
 
+struct NordColor {
+    name: &'static str,
+    cluster: &'static str,
+    hex: &'static str,
+}
+
+const NORD_PALETTE: &[NordColor] = &[
+    // Polar Night (0..=3)
+    NordColor { name: "Nord 0 (Darkest Night)", cluster: "Polar Night", hex: "#2E3440" },
+    NordColor { name: "Nord 1 (Darker Night)", cluster: "Polar Night", hex: "#3B4252" },
+    NordColor { name: "Nord 2 (Dark Night)", cluster: "Polar Night", hex: "#434C5E" },
+    NordColor { name: "Nord 3 (Night Base)", cluster: "Polar Night", hex: "#4C566A" },
+    // Snow Storm (4..=6)
+    NordColor { name: "Nord 4 (Snow Storm)", cluster: "Snow Storm", hex: "#D8DEE9" },
+    NordColor { name: "Nord 5 (Lighter Snow)", cluster: "Snow Storm", hex: "#E5E9F0" },
+    NordColor { name: "Nord 6 (Lightest Snow)", cluster: "Snow Storm", hex: "#ECEFF4" },
+    // Frost (7..=10)
+    NordColor { name: "Nord 7 (Frost Teal)", cluster: "Frost", hex: "#8FBCBB" },
+    NordColor { name: "Nord 8 (Frost Cyan)", cluster: "Frost", hex: "#88C0D0" },
+    NordColor { name: "Nord 9 (Frost Sky)", cluster: "Frost", hex: "#81A1C1" },
+    NordColor { name: "Nord 10 (Frost Blue)", cluster: "Frost", hex: "#5E81AC" },
+    // Aurora (11..=15)
+    NordColor { name: "Nord 11 (Aurora Red)", cluster: "Aurora", hex: "#BF616A" },
+    NordColor { name: "Nord 12 (Aurora Orange)", cluster: "Aurora", hex: "#D08770" },
+    NordColor { name: "Nord 13 (Aurora Yellow)", cluster: "Aurora", hex: "#EBCB8B" },
+    NordColor { name: "Nord 14 (Aurora Green)", cluster: "Aurora", hex: "#A3BE8C" },
+    NordColor { name: "Nord 15 (Aurora Purple)", cluster: "Aurora", hex: "#B48EAD" },
+];
+
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let h_prime = (h % 360.0) / 60.0;
+    let x = c * (1.0 - ((h_prime % 2.0) - 1.0).abs());
+    let (r1, g1, b1) = if (0.0..1.0).contains(&h_prime) {
+        (c, x, 0.0)
+    } else if (1.0..2.0).contains(&h_prime) {
+        (x, c, 0.0)
+    } else if (2.0..3.0).contains(&h_prime) {
+        (0.0, c, x)
+    } else if (3.0..4.0).contains(&h_prime) {
+        (0.0, x, c)
+    } else if (4.0..5.0).contains(&h_prime) {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+    let m = l - c / 2.0;
+    (
+        ((r1 + m).clamp(0.0, 1.0) * 255.0).round() as u8,
+        ((g1 + m).clamp(0.0, 1.0) * 255.0).round() as u8,
+        ((b1 + m).clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
 pub unsafe fn apply_accent_color(hex_or_name: &str) {
     let b = match BINDINGS.get() {
         Some(b) => b,
@@ -5553,13 +5778,17 @@ pub unsafe fn apply_accent_color(hex_or_name: &str) {
         .iter()
         .find(|(n, h, _)| n.eq_ignore_ascii_case(hex_or_name) || h.eq_ignore_ascii_case(hex_or_name))
     {
-        *found
+        (found.0, found.1, found.2.to_string())
     } else {
-        (hex_or_name, hex_or_name, "none")
+        (
+            hex_or_name,
+            hex_or_name,
+            format!("radial-gradient(ellipse at 50% -10%, alpha({hex_or_name}, 0.35) 0%, alpha({hex_or_name}, 0.10) 45%, transparent 75%)"),
+        )
     };
 
     let css = format!(
-        ".browser-chrome {{\n    background-image: linear-gradient(135deg, alpha({hex}, 0.22), alpha({hex}, 0.08));\n    transition: background-image 200ms ease;\n}}\n.tab-row.active, .sidebar-tab.active, .sidebar-tab.suggested-action, button.suggested-action {{\n    background-color: alpha({hex}, 0.28);\n}}\n.start-page-container {{\n    background: {bg};\n}}\n.start-page-scrolled {{\n    background: transparent;\n}}",
+        "@define-color accent_color {hex};\n@define-color accent_bg_color {hex};\n.browser-chrome {{\n    background-image: linear-gradient(135deg, alpha({hex}, 0.22), alpha({hex}, 0.08));\n    transition: background-image 200ms ease;\n}}\n.tab-row.active, .sidebar-tab.active, .sidebar-tab.suggested-action, button.suggested-action {{\n    background-color: alpha({hex}, 0.28);\n}}\n.start-page-container {{\n    background: {bg};\n}}\n.start-page-scrolled {{\n    background: transparent;\n}}",
         hex = hex,
         bg = bg
     );
@@ -5570,7 +5799,7 @@ pub unsafe fn apply_accent_color(hex_or_name: &str) {
         if provider.is_null() {
             provider = (b.gtk_css_provider_new)();
             ACCENT_CSS_PROVIDER.store(provider, Ordering::SeqCst);
-            (b.gtk_style_context_add_provider_for_display)(display, provider, 601);
+            (b.gtk_style_context_add_provider_for_display)(display, provider, 800);
         }
         if let Ok(c_css) = CString::new(css) {
             (b.gtk_css_provider_load_from_string)(provider, c_css.as_ptr());
@@ -5593,6 +5822,62 @@ fn load_saved_accent() -> String {
         .to_string()
 }
 
+unsafe extern "C" fn on_hue_slider_changed(range: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let hue = (b.gtk_range_get_value)(range);
+    let (r, g, b_val) = hsl_to_rgb(hue, 0.75, 0.50);
+    let hex = format!("#{:02x}{:02x}{:02x}", r, g, b_val);
+    apply_accent_color(&hex);
+    let lbl = ACTIVE_HUE_DESC_LABEL.load(Ordering::SeqCst);
+    if !lbl.is_null() {
+        let text = format!("Continuous Accent Hue: {:.0}° ({})", hue, hex);
+        if let Ok(c_text) = CString::new(text) {
+            (b.gtk_label_set_text)(lbl, c_text.as_ptr());
+        }
+    }
+}
+
+unsafe extern "C" fn on_nord_slider_changed(range: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let val = (b.gtk_range_get_value)(range).round() as usize;
+    let idx = val.min(NORD_PALETTE.len() - 1);
+    let item = &NORD_PALETTE[idx];
+    apply_accent_color(item.hex);
+    let lbl = ACTIVE_NORD_DESC_LABEL.load(Ordering::SeqCst);
+    if !lbl.is_null() {
+        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+        if let Ok(c_text) = CString::new(text) {
+            (b.gtk_label_set_text)(lbl, c_text.as_ptr());
+        }
+    }
+}
+
+unsafe extern "C" fn on_search_engine_toggled(button: *mut c_void, user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    if (b.gtk_toggle_button_get_active)(button) == 0 {
+        return;
+    }
+    let idx = user_data as usize;
+    match idx {
+        0 => set_default_search_engine("DuckDuckGo", "https://duckduckgo.com/?q=%s", "https://duckduckgo.com"),
+        1 => set_default_search_engine("Google", "https://www.google.com/search?q=%s", "https://www.google.com"),
+        2 => set_default_search_engine("Brave", "https://search.brave.com/search?q=%s", "https://search.brave.com"),
+        3 => set_default_search_engine("Bing", "https://www.bing.com/search?q=%s", "https://www.bing.com"),
+        4 => set_default_search_engine("Ecosia", "https://www.ecosia.org/search?q=%s", "https://www.ecosia.org"),
+        _ => {}
+    }
+}
+
+#[allow(dead_code)]
 unsafe extern "C" fn on_accent_button_clicked(_button: *mut c_void, user_data: *mut c_void) {
     let idx = user_data as usize;
     if let Some((_name, hex, _)) = GNOME_ACCENTS.get(idx) {
@@ -5608,9 +5893,16 @@ unsafe fn get_network_session_for_profile(
     b: &GtkBindings,
     profile: &crate::profiles::BrowserProfile,
 ) -> *mut c_void {
+    let is_incog = IS_INCOGNITO.load(Ordering::SeqCst);
+    let cache_key = if is_incog {
+        "incognito".to_string()
+    } else {
+        profile.id.clone()
+    };
+
     if let Ok(guard) = PROFILE_NETWORK_SESSIONS.lock() {
         if let Some(map) = guard.as_ref() {
-            if let Some(&ptr) = map.get(&profile.id) {
+            if let Some(&ptr) = map.get(&cache_key) {
                 if ptr != 0 {
                     return ptr as *mut c_void;
                 }
@@ -5618,7 +5910,7 @@ unsafe fn get_network_session_for_profile(
         }
     }
 
-    let session = if profile.ephemeral {
+    let session = if profile.ephemeral || is_incog {
         (b.webkit_network_session_new_ephemeral)()
     } else if profile.id == "standard" {
         (b.webkit_network_session_get_default)()
@@ -5661,7 +5953,7 @@ unsafe fn get_network_session_for_profile(
 
     if let Ok(mut guard) = PROFILE_NETWORK_SESSIONS.lock() {
         if let Some(map) = guard.as_mut() {
-            map.insert(profile.id.clone(), session as usize);
+            map.insert(cache_key, session as usize);
         }
     }
 
@@ -5893,6 +6185,49 @@ unsafe fn switch_profile(profile_id: &str) {
         None => return,
     };
 
+    let outgoing_webview = ACTIVE_WEBVIEW.load(Ordering::SeqCst);
+    if !outgoing_webview.is_null() {
+        let current_uri_ptr = (b.webkit_web_view_get_uri)(outgoing_webview);
+        if !current_uri_ptr.is_null() {
+            let cur_uri = CStr::from_ptr(current_uri_ptr)
+                .to_string_lossy()
+                .to_string();
+            if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+                if let Some(mgr) = mgr_guard.as_mut() {
+                    if let Some(active) = mgr.active_tab_mut() {
+                        if !active.is_start_page {
+                            active.url = cur_uri.clone();
+                            let title_ptr = (b.webkit_web_view_get_title)(outgoing_webview);
+                            let page_title = if !title_ptr.is_null() {
+                                let t = CStr::from_ptr(title_ptr)
+                                    .to_string_lossy()
+                                    .trim()
+                                    .to_string();
+                                if t.is_empty() {
+                                    None
+                                } else {
+                                    Some(t)
+                                }
+                            } else {
+                                None
+                            };
+
+                            active.title = if active.is_incognito {
+                                "Incognito Mode".to_string()
+                            } else if let Some(t) = page_title {
+                                t
+                            } else if cur_uri.is_empty() || cur_uri == "about:blank" {
+                                "New Tab".to_string()
+                            } else {
+                                cur_uri.clone()
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let profile = {
         let mut guard = match ACTIVE_PROFILE_STORAGE.lock() {
             Ok(g) => g,
@@ -5962,8 +6297,16 @@ unsafe fn switch_profile(profile_id: &str) {
         switch_to_webview();
         if let Some(url) = url_to_load {
             if !webview.is_null() {
-                if let Ok(c_url) = CString::new(url.clone()) {
-                    (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
+                let current_uri_ptr = (b.webkit_web_view_get_uri)(webview);
+                let current_uri = if !current_uri_ptr.is_null() {
+                    CStr::from_ptr(current_uri_ptr).to_string_lossy().to_string()
+                } else {
+                    String::new()
+                };
+                if current_uri != url {
+                    if let Ok(c_url) = CString::new(url.clone()) {
+                        (b.webkit_web_view_load_uri)(webview, c_url.as_ptr());
+                    }
                 }
             }
             if !entry.is_null() {
@@ -5977,12 +6320,63 @@ unsafe fn switch_profile(profile_id: &str) {
     refresh_sidebar_tabs();
 }
 
+unsafe extern "C" fn on_profile_popover_closed(popover: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    if ACTIVE_PROFILE_CONTEXT_POPOVER
+        .compare_exchange(
+            popover,
+            std::ptr::null_mut(),
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        )
+        .is_ok()
+    {
+        (b.gtk_widget_unparent)(popover);
+    }
+}
+
+unsafe fn close_profile_context_popover(b: &GtkBindings) {
+    let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
+    if !popover.is_null() {
+        (b.gtk_popover_popdown)(popover);
+        (b.gtk_widget_unparent)(popover);
+    }
+}
+
+unsafe fn ensure_profile_popover(b: &GtkBindings) -> *mut c_void {
+    let existing = ACTIVE_PROFILE_CONTEXT_POPOVER.load(Ordering::SeqCst);
+    if !existing.is_null() {
+        return existing;
+    }
+    let anchor = ACTIVE_PROFILE_BTN.load(Ordering::SeqCst);
+    let popover = (b.gtk_popover_new)();
+    if !anchor.is_null() {
+        (b.gtk_widget_set_parent)(popover, anchor);
+    }
+    let closed_sig = CString::new("closed").unwrap();
+    let cb_closed = std::mem::transmute::<unsafe extern "C" fn(*mut c_void, *mut c_void), GCallback>(
+        on_profile_popover_closed,
+    );
+    (b.g_signal_connect_data)(
+        popover,
+        closed_sig.as_ptr(),
+        cb_closed,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    popover
+}
+
 unsafe extern "C" fn on_profile_popover_cancel(_button: *mut c_void, user_data: *mut c_void) {
     let popover = user_data as *mut c_void;
     if !popover.is_null() {
         if let Some(b) = BINDINGS.get() {
             (b.gtk_popover_popdown)(popover);
-            (b.gtk_widget_unparent)(popover);
         }
     }
 }
@@ -5995,29 +6389,20 @@ unsafe extern "C" fn on_profile_row_clicked(_button: *mut c_void, user_data: *mu
             Some(b) => b,
             None => return,
         };
-        let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
+        let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.load(Ordering::SeqCst);
         if !popover.is_null() {
             (b.gtk_popover_popdown)(popover);
-            (b.gtk_widget_unparent)(popover);
         }
         switch_profile(&profile_id);
     }
 }
 
-unsafe extern "C" fn on_profile_btn_clicked(button: *mut c_void, _user_data: *mut c_void) {
+unsafe fn show_profile_switcher_popover(_anchor: *mut c_void) {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let old_popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !old_popover.is_null() {
-        (b.gtk_popover_popdown)(old_popover);
-        (b.gtk_widget_unparent)(old_popover);
-    }
-
-    let popover = (b.gtk_popover_new)();
-    (b.gtk_widget_set_parent)(popover, button);
-    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    let popover = ensure_profile_popover(b);
 
     let vbox = (b.gtk_box_new)(1, 6);
     (b.gtk_widget_set_margin_start)(vbox, 10);
@@ -6099,7 +6484,7 @@ unsafe extern "C" fn on_profile_btn_clicked(button: *mut c_void, _user_data: *mu
         btn_new_prof,
         CString::new("clicked").unwrap().as_ptr(),
         cb_create_open,
-        button,
+        ACTIVE_PROFILE_BTN.load(Ordering::SeqCst),
         std::ptr::null_mut(),
         0,
     );
@@ -6109,8 +6494,12 @@ unsafe extern "C" fn on_profile_btn_clicked(button: *mut c_void, _user_data: *mu
     (b.gtk_popover_popup)(popover);
 }
 
+unsafe extern "C" fn on_profile_btn_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    show_profile_switcher_popover(ACTIVE_PROFILE_BTN.load(Ordering::SeqCst));
+}
+
 unsafe extern "C" fn on_profile_btn_right_click(
-    gesture: *mut c_void,
+    _gesture: *mut c_void,
     _n_press: libc::c_int,
     _x: libc::c_double,
     _y: libc::c_double,
@@ -6120,20 +6509,12 @@ unsafe extern "C" fn on_profile_btn_right_click(
         Some(b) => b,
         None => return,
     };
-    let button = (b.gtk_event_controller_get_widget)(gesture);
+    let button = ACTIVE_PROFILE_BTN.load(Ordering::SeqCst);
     if button.is_null() {
         return;
     }
 
-    let old_popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !old_popover.is_null() {
-        (b.gtk_popover_popdown)(old_popover);
-        (b.gtk_widget_unparent)(old_popover);
-    }
-
-    let popover = (b.gtk_popover_new)();
-    (b.gtk_widget_set_parent)(popover, button);
-    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    let popover = ensure_profile_popover(b);
 
     let vbox = (b.gtk_box_new)(1, 6);
     (b.gtk_widget_set_margin_start)(vbox, 10);
@@ -6162,7 +6543,7 @@ unsafe extern "C" fn on_profile_btn_right_click(
         btn_switch,
         CString::new("clicked").unwrap().as_ptr(),
         cb_left,
-        button,
+        ACTIVE_PROFILE_BTN.load(Ordering::SeqCst),
         std::ptr::null_mut(),
         0,
     );
@@ -6180,7 +6561,7 @@ unsafe extern "C" fn on_profile_btn_right_click(
         btn_rename,
         CString::new("clicked").unwrap().as_ptr(),
         cb_rename_dialog,
-        button,
+        ACTIVE_PROFILE_BTN.load(Ordering::SeqCst),
         std::ptr::null_mut(),
         0,
     );
@@ -6198,7 +6579,7 @@ unsafe extern "C" fn on_profile_btn_right_click(
         btn_icon,
         CString::new("clicked").unwrap().as_ptr(),
         cb_icon_dialog,
-        button,
+        ACTIVE_PROFILE_BTN.load(Ordering::SeqCst),
         std::ptr::null_mut(),
         0,
     );
@@ -6216,7 +6597,7 @@ unsafe extern "C" fn on_profile_btn_right_click(
         btn_create,
         CString::new("clicked").unwrap().as_ptr(),
         cb_create_dialog,
-        button,
+        ACTIVE_PROFILE_BTN.load(Ordering::SeqCst),
         std::ptr::null_mut(),
         0,
     );
@@ -6258,21 +6639,12 @@ unsafe extern "C" fn on_profile_btn_right_click(
     (b.gtk_popover_popup)(popover);
 }
 
-unsafe extern "C" fn on_profile_rename_button_clicked(_button: *mut c_void, user_data: *mut c_void) {
+unsafe extern "C" fn on_profile_rename_button_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let anchor = user_data as *mut c_void;
-    let old_popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !old_popover.is_null() {
-        (b.gtk_popover_popdown)(old_popover);
-        (b.gtk_widget_unparent)(old_popover);
-    }
-
-    let popover = (b.gtk_popover_new)();
-    (b.gtk_widget_set_parent)(popover, anchor);
-    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    let popover = ensure_profile_popover(b);
 
     let vbox = (b.gtk_box_new)(1, 8);
     (b.gtk_widget_set_margin_start)(vbox, 12);
@@ -6370,28 +6742,18 @@ unsafe extern "C" fn on_profile_rename_save(_button: *mut c_void, user_data: *mu
     }
     if !popover.is_null() {
         (b.gtk_popover_popdown)(popover);
-        (b.gtk_widget_unparent)(popover);
     }
 }
 
 unsafe extern "C" fn on_profile_select_icon_button_clicked(
     _button: *mut c_void,
-    user_data: *mut c_void,
+    _user_data: *mut c_void,
 ) {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let anchor = user_data as *mut c_void;
-    let old_popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !old_popover.is_null() {
-        (b.gtk_popover_popdown)(old_popover);
-        (b.gtk_widget_unparent)(old_popover);
-    }
-
-    let popover = (b.gtk_popover_new)();
-    (b.gtk_widget_set_parent)(popover, anchor);
-    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    let popover = ensure_profile_popover(b);
 
     let vbox = (b.gtk_box_new)(1, 8);
     (b.gtk_widget_set_margin_start)(vbox, 12);
@@ -6421,12 +6783,11 @@ unsafe extern "C" fn on_profile_select_icon_button_clicked(
         (b.gtk_image_set_pixel_size)(img, 20);
         (b.gtk_button_set_child)(icon_btn, img);
 
-        let ptr = Box::into_raw(Box::new(icon_name.to_string()));
         (b.g_signal_connect_data)(
             icon_btn,
             CString::new("clicked").unwrap().as_ptr(),
             cb_pick,
-            ptr as *mut c_void,
+            i as *mut c_void,
             std::ptr::null_mut(),
             0,
         );
@@ -6461,9 +6822,8 @@ unsafe extern "C" fn on_profile_select_icon_button_clicked(
 }
 
 unsafe extern "C" fn on_profile_icon_picked(_button: *mut c_void, user_data: *mut c_void) {
-    let ptr = user_data as *mut String;
-    if !ptr.is_null() {
-        let icon_name = Box::from_raw(ptr);
+    let idx = user_data as usize;
+    if let Some(&icon_name) = crate::profiles::AVAILABLE_PROFILE_ICONS.get(idx) {
         let b = match BINDINGS.get() {
             Some(b) => b,
             None => return,
@@ -6471,42 +6831,32 @@ unsafe extern "C" fn on_profile_icon_picked(_button: *mut c_void, user_data: *mu
         let active_id = get_active_browser_profile().id;
         if let Ok(mut guard) = ACTIVE_PROFILE_STORAGE.lock() {
             if let Some(storage) = guard.as_mut() {
-                storage.set_profile_icon(&active_id, &icon_name);
+                storage.set_profile_icon(&active_id, icon_name);
                 let _ = storage.save();
             }
         }
         let icon_img = ACTIVE_PROFILE_BTN_ICON.load(Ordering::SeqCst);
         if !icon_img.is_null() {
             if let Some(set_icon) = b.gtk_image_set_from_icon_name {
-                set_icon(icon_img, CString::new(*icon_name).unwrap().as_ptr());
+                set_icon(icon_img, CString::new(icon_name).unwrap().as_ptr());
             }
         }
-        let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
+        let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.load(Ordering::SeqCst);
         if !popover.is_null() {
             (b.gtk_popover_popdown)(popover);
-            (b.gtk_widget_unparent)(popover);
         }
     }
 }
 
 unsafe extern "C" fn on_profile_create_button_clicked(
     _button: *mut c_void,
-    user_data: *mut c_void,
+    _user_data: *mut c_void,
 ) {
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
     };
-    let anchor = user_data as *mut c_void;
-    let old_popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !old_popover.is_null() {
-        (b.gtk_popover_popdown)(old_popover);
-        (b.gtk_widget_unparent)(old_popover);
-    }
-
-    let popover = (b.gtk_popover_new)();
-    (b.gtk_widget_set_parent)(popover, anchor);
-    ACTIVE_PROFILE_CONTEXT_POPOVER.store(popover, Ordering::SeqCst);
+    let popover = ensure_profile_popover(b);
 
     if let Ok(mut icon_guard) = ACTIVE_PROFILE_CREATE_SELECTED_ICON.lock() {
         *icon_guard = "avatar-default-symbolic".to_string();
@@ -6551,12 +6901,11 @@ unsafe extern "C" fn on_profile_create_button_clicked(
         (b.gtk_image_set_pixel_size)(img, 18);
         (b.gtk_button_set_child)(icon_btn, img);
 
-        let ptr = Box::into_raw(Box::new(icon_name.to_string()));
         (b.g_signal_connect_data)(
             icon_btn,
             CString::new("clicked").unwrap().as_ptr(),
             cb_select,
-            ptr as *mut c_void,
+            i as *mut c_void,
             std::ptr::null_mut(),
             0,
         );
@@ -6620,11 +6969,10 @@ unsafe extern "C" fn on_profile_create_button_clicked(
 }
 
 unsafe extern "C" fn on_profile_create_icon_picked(button: *mut c_void, user_data: *mut c_void) {
-    let ptr = user_data as *mut String;
-    if !ptr.is_null() {
-        let icon_name = Box::from_raw(ptr);
+    let idx = user_data as usize;
+    if let Some(&icon_name) = crate::profiles::AVAILABLE_PROFILE_ICONS.get(idx) {
         if let Ok(mut icon_guard) = ACTIVE_PROFILE_CREATE_SELECTED_ICON.lock() {
-            *icon_guard = *icon_name;
+            *icon_guard = icon_name.to_string();
         }
         if let Some(b) = BINDINGS.get() {
             (b.gtk_widget_add_css_class)(
@@ -6682,7 +7030,6 @@ unsafe extern "C" fn on_profile_create_save(_button: *mut c_void, user_data: *mu
 
     if !popover.is_null() {
         (b.gtk_popover_popdown)(popover);
-        (b.gtk_widget_unparent)(popover);
     }
 
     switch_profile(&new_id);
@@ -6701,11 +7048,7 @@ unsafe extern "C" fn on_profile_delete_button_clicked(
         return;
     }
 
-    let popover = ACTIVE_PROFILE_CONTEXT_POPOVER.swap(std::ptr::null_mut(), Ordering::SeqCst);
-    if !popover.is_null() {
-        (b.gtk_popover_popdown)(popover);
-        (b.gtk_widget_unparent)(popover);
-    }
+    close_profile_context_popover(b);
 
     let id = active_prof.id.clone();
 
@@ -7292,16 +7635,59 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 
     let initial_requested_url = INITIAL_URL.lock().ok().and_then(|g| g.clone());
 
-    let (start_url, is_initial_start_page) = match initial_requested_url {
-        Some(u) => {
-            if u == "about:blank" || u == "browser://start" {
-                ("about:blank".to_string(), true)
+    let mut start_url = "about:blank".to_string();
+    let mut is_initial_start_page = true;
+
+    // Initialize TabManager & Restore Session
+    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
+        let mut mgr = crate::tabs::TabManager::new();
+        if let Some(tab) = mgr.active_tab_mut() {
+            tab.is_incognito = is_incognito;
+            tab.profile_id = initial_profile.id.clone();
+            tab.is_start_page = true;
+            tab.url = "about:blank".to_string();
+            tab.title = if is_incognito {
+                "Incognito Mode".to_string()
             } else {
-                (u, false)
+                "Start Page".to_string()
+            };
+        }
+        if !is_incognito && !initial_profile.ephemeral {
+            if let Some(path) = get_session_file_path() {
+                if path.exists() {
+                    let _ = mgr.restore_session(&path);
+                }
             }
         }
-        None => ("about:blank".to_string(), true),
-    };
+
+        if let Some(u) = initial_requested_url.as_ref() {
+            if u == "about:blank" || u == "browser://start" {
+                start_url = "about:blank".to_string();
+                is_initial_start_page = true;
+            } else {
+                start_url = u.clone();
+                is_initial_start_page = false;
+            }
+            if let Some(tab) = mgr.active_tab_mut() {
+                tab.url = start_url.clone();
+                tab.is_start_page = is_initial_start_page;
+                tab.title = if is_initial_start_page {
+                    "Start Page".to_string()
+                } else {
+                    start_url.clone()
+                };
+            }
+        } else {
+            // Restore from active tab of initial profile
+            if let Some(tab) = mgr.active_tab() {
+                if tab.profile_id == initial_profile.id {
+                    start_url = tab.url.clone();
+                    is_initial_start_page = tab.is_start_page || tab.url == "about:blank" || tab.url == "browser://start";
+                }
+            }
+        }
+        *mgr_guard = Some(mgr);
+    }
 
     if !is_initial_start_page {
         if let Ok(c_start_url) = CString::new(start_url.clone()) {
@@ -7363,32 +7749,6 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(title_box, reader_btn);
     (b.gtk_box_append)(title_box, star_btn);
     (b.adw_header_bar_set_title_widget)(header, title_box);
-
-    // Initialize TabManager
-    if let Ok(mut mgr_guard) = TAB_MANAGER.lock() {
-        let mut mgr = crate::tabs::TabManager::new();
-        if let Some(tab) = mgr.active_tab_mut() {
-            tab.url = start_url.clone();
-            tab.is_start_page = is_initial_start_page;
-            tab.title = if is_incognito {
-                "Incognito Mode".to_string()
-            } else if is_initial_start_page {
-                "Start Page".to_string()
-            } else {
-                start_url.clone()
-            };
-            tab.is_incognito = is_incognito;
-            tab.profile_id = initial_profile.id.clone();
-        }
-        if !is_incognito && !initial_profile.ephemeral {
-            if let Some(path) = get_session_file_path() {
-                if path.exists() {
-                    let _ = mgr.restore_session(&path);
-                }
-            }
-        }
-        *mgr_guard = Some(mgr);
-    }
 
     // Store active window pointer
     ACTIVE_WINDOW.store(win, Ordering::SeqCst);
@@ -7522,6 +7882,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
 
     let initial_webview = create_webview_for_profile(b, &initial_profile);
     ACTIVE_WEBVIEW.store(initial_webview, Ordering::SeqCst);
+    ACTIVE_NETWORK_SESSION.store(get_network_session_for_profile(b, &initial_profile), Ordering::SeqCst);
 
     if !is_initial_start_page {
         if let Ok(c_start_url) = CString::new(start_url) {
@@ -7668,12 +8029,48 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_label_set_xalign)(lbl_search_desc, 0.0);
     (b.gtk_box_append)(card_search, lbl_search_desc);
 
-    let search_btns_box = (b.gtk_box_new)(0, 4);
-    let btn_ddg = (b.gtk_button_new_with_label)(CString::new("DuckDuckGo").unwrap().as_ptr());
-    let btn_google = (b.gtk_button_new_with_label)(CString::new("Google").unwrap().as_ptr());
-    let btn_brave = (b.gtk_button_new_with_label)(CString::new("Brave").unwrap().as_ptr());
-    let btn_bing = (b.gtk_button_new_with_label)(CString::new("Bing").unwrap().as_ptr());
-    let btn_ecosia = (b.gtk_button_new_with_label)(CString::new("Ecosia").unwrap().as_ptr());
+    let search_btns_box = (b.gtk_box_new)(0, 0);
+    (b.gtk_widget_add_css_class)(search_btns_box, CString::new("linked").unwrap().as_ptr());
+    (b.gtk_widget_set_hexpand)(search_btns_box, 1);
+
+    let make_search_toggle = |icon_name: &str, tooltip: &str| -> *mut c_void {
+        let btn = (b.gtk_toggle_button_new)();
+        let img = (b.gtk_image_new_from_icon_name)(CString::new(icon_name).unwrap().as_ptr());
+        (b.gtk_image_set_pixel_size)(img, 20);
+        (b.gtk_button_set_child)(btn, img);
+        (b.gtk_widget_set_tooltip_text)(btn, CString::new(tooltip).unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new("flat").unwrap().as_ptr());
+        (b.gtk_widget_add_css_class)(btn, CString::new("circular").unwrap().as_ptr());
+        (b.gtk_widget_set_hexpand)(btn, 1);
+        btn
+    };
+
+    let btn_ddg = make_search_toggle("vingilot-search-ddg-symbolic", "DuckDuckGo — Private Default Search");
+    let btn_google = make_search_toggle("vingilot-search-google-symbolic", "Google — Web Search");
+    let btn_brave = make_search_toggle("vingilot-search-brave-symbolic", "Brave — Independent Index Search");
+    let btn_bing = make_search_toggle("vingilot-search-bing-symbolic", "Bing — Web Search");
+    let btn_ecosia = make_search_toggle("vingilot-search-ecosia-symbolic", "Ecosia — Eco-friendly Search");
+
+    (b.gtk_toggle_button_set_group)(btn_google, btn_ddg);
+    (b.gtk_toggle_button_set_group)(btn_brave, btn_ddg);
+    (b.gtk_toggle_button_set_group)(btn_bing, btn_ddg);
+    (b.gtk_toggle_button_set_group)(btn_ecosia, btn_ddg);
+
+    let current_default = START_PAGE_MODEL.lock().ok()
+        .and_then(|g| g.as_ref().map(|m| m.search_engine_name.to_lowercase()))
+        .unwrap_or_else(|| "duckduckgo".to_string());
+
+    if current_default.contains("google") {
+        (b.gtk_toggle_button_set_active)(btn_google, 1);
+    } else if current_default.contains("brave") {
+        (b.gtk_toggle_button_set_active)(btn_brave, 1);
+    } else if current_default.contains("bing") {
+        (b.gtk_toggle_button_set_active)(btn_bing, 1);
+    } else if current_default.contains("ecosia") {
+        (b.gtk_toggle_button_set_active)(btn_ecosia, 1);
+    } else {
+        (b.gtk_toggle_button_set_active)(btn_ddg, 1);
+    }
 
     (b.gtk_box_append)(search_btns_box, btn_ddg);
     (b.gtk_box_append)(search_btns_box, btn_google);
@@ -7715,35 +8112,48 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     );
     (b.gtk_box_append)(card_theme, btn_theme_incog);
 
-    let lbl_accent_sel = (b.gtk_label_new)(CString::new("Start Page Accent:").unwrap().as_ptr());
-    (b.gtk_label_set_xalign)(lbl_accent_sel, 0.0);
-    (b.gtk_box_append)(card_theme, lbl_accent_sel);
+    // Accent Hue Slider
+    let lbl_hue = (b.gtk_label_new)(CString::new("Continuous Accent Hue: 210° (#1f80e0)").unwrap().as_ptr());
+    (b.gtk_label_set_xalign)(lbl_hue, 0.0);
+    ACTIVE_HUE_DESC_LABEL.store(lbl_hue, Ordering::SeqCst);
+    (b.gtk_box_append)(card_theme, lbl_hue);
 
-    let accents_box1 = (b.gtk_box_new)(0, 4);
-    let accents_box2 = (b.gtk_box_new)(0, 4);
-    let cb_accent_btn = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_accent_button_clicked);
+    let hue_scale = (b.gtk_scale_new_with_range)(0, 0.0, 360.0, 1.0);
+    (b.gtk_scale_set_draw_value)(hue_scale, 0);
+    (b.gtk_widget_add_css_class)(hue_scale, CString::new("hue-slider").unwrap().as_ptr());
+    (b.gtk_range_set_value)(hue_scale, 210.0);
+    ACTIVE_HUE_SCALE.store(hue_scale, Ordering::SeqCst);
+    (b.gtk_box_append)(card_theme, hue_scale);
 
-    for (idx, (acc_name, _, _)) in GNOME_ACCENTS.iter().enumerate() {
-        let acc_btn = (b.gtk_button_new_with_label)(CString::new(*acc_name).unwrap().as_ptr());
-        (b.g_signal_connect_data)(
-            acc_btn,
-            CString::new("clicked").unwrap().as_ptr(),
-            cb_accent_btn,
-            idx as *mut c_void,
-            std::ptr::null_mut(),
-            0,
-        );
-        if idx < 5 {
-            (b.gtk_box_append)(accents_box1, acc_btn);
-        } else {
-            (b.gtk_box_append)(accents_box2, acc_btn);
+    // Nord Palette Slider with Cluster Marks
+    let lbl_nord = (b.gtk_label_new)(CString::new("Nord Palette: Nord 8 (Frost Cyan) #88C0D0").unwrap().as_ptr());
+    (b.gtk_label_set_xalign)(lbl_nord, 0.0);
+    ACTIVE_NORD_DESC_LABEL.store(lbl_nord, Ordering::SeqCst);
+    (b.gtk_box_append)(card_theme, lbl_nord);
+
+    let nord_scale = (b.gtk_scale_new_with_range)(0, 0.0, 15.0, 1.0);
+    (b.gtk_scale_set_draw_value)(nord_scale, 0);
+    (b.gtk_widget_add_css_class)(nord_scale, CString::new("nord-slider").unwrap().as_ptr());
+    (b.gtk_widget_add_css_class)(nord_scale, CString::new("scale-has-marks-below").unwrap().as_ptr());
+
+    // Marks added for the 4 Nord clusters (GtkPositionType GTK_POS_BOTTOM = 3)
+    (b.gtk_scale_add_mark)(nord_scale, 0.0, 3, CString::new("Polar").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 4.0, 3, CString::new("Snow").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 7.0, 3, CString::new("Frost").unwrap().as_ptr());
+    (b.gtk_scale_add_mark)(nord_scale, 11.0, 3, CString::new("Aurora").unwrap().as_ptr());
+    (b.gtk_range_set_value)(nord_scale, 8.0);
+    ACTIVE_NORD_SCALE.store(nord_scale, Ordering::SeqCst);
+    (b.gtk_box_append)(card_theme, nord_scale);
+
+    // Initialise slider values from saved accent if matched
+    let saved_accent = load_saved_accent();
+    if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)) {
+        (b.gtk_range_set_value)(nord_scale, idx as f64);
+        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+        if let Ok(c_text) = CString::new(text) {
+            (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
         }
     }
-    (b.gtk_box_append)(card_theme, accents_box1);
-    (b.gtk_box_append)(card_theme, accents_box2);
 
     let (row_reader_mode, _) = make_switch_row(b, "Auto Distraction-Free Reader Mode", true);
     (b.gtk_box_append)(card_theme, row_reader_mode);
@@ -7931,26 +8341,18 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         on_save_ai_settings_clicked,
     );
 
-    let cb_search_ddg = std::mem::transmute::<
+    let cb_search_toggle = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_search_ddg_clicked);
-    let cb_search_google = std::mem::transmute::<
+    >(on_search_engine_toggled);
+    let cb_hue_changed = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_search_google_clicked);
-    let cb_search_brave = std::mem::transmute::<
+    >(on_hue_slider_changed);
+    let cb_nord_changed = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
         GCallback,
-    >(on_search_brave_clicked);
-    let cb_search_bing = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_search_bing_clicked);
-    let cb_search_ecosia = std::mem::transmute::<
-        unsafe extern "C" fn(*mut c_void, *mut c_void),
-        GCallback,
-    >(on_search_ecosia_clicked);
+    >(on_nord_slider_changed);
 
     let cb_theme_sys = std::mem::transmute::<
         unsafe extern "C" fn(*mut c_void, *mut c_void),
@@ -8025,43 +8427,63 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         0,
     );
 
-    // Search Engine signals in side menu
+    // Search Engine toggle signals in side menu
+    let toggled_sig = CString::new("toggled").unwrap();
     (b.g_signal_connect_data)(
         btn_ddg,
-        clicked_sig.as_ptr(),
-        cb_search_ddg,
-        std::ptr::null_mut(),
+        toggled_sig.as_ptr(),
+        cb_search_toggle,
+        0 as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
         btn_google,
-        clicked_sig.as_ptr(),
-        cb_search_google,
-        std::ptr::null_mut(),
+        toggled_sig.as_ptr(),
+        cb_search_toggle,
+        1 as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
         btn_brave,
-        clicked_sig.as_ptr(),
-        cb_search_brave,
-        std::ptr::null_mut(),
+        toggled_sig.as_ptr(),
+        cb_search_toggle,
+        2 as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
         btn_bing,
-        clicked_sig.as_ptr(),
-        cb_search_bing,
-        std::ptr::null_mut(),
+        toggled_sig.as_ptr(),
+        cb_search_toggle,
+        3 as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
     (b.g_signal_connect_data)(
         btn_ecosia,
-        clicked_sig.as_ptr(),
-        cb_search_ecosia,
+        toggled_sig.as_ptr(),
+        cb_search_toggle,
+        4 as *mut c_void,
+        std::ptr::null_mut(),
+        0,
+    );
+
+    // Accent Hue and Nord Slider signals
+    let val_changed_sig = CString::new("value-changed").unwrap();
+    (b.g_signal_connect_data)(
+        hue_scale,
+        val_changed_sig.as_ptr(),
+        cb_hue_changed,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.g_signal_connect_data)(
+        nord_scale,
+        val_changed_sig.as_ptr(),
+        cb_nord_changed,
         std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
@@ -8266,13 +8688,16 @@ pub fn run_gui(is_incognito: bool, initial_url: Option<String>) -> bool {
             if !icon_theme.is_null() {
                 let local_icons_path = CString::new("data/icons").unwrap();
                 (b.gtk_icon_theme_add_search_path)(icon_theme, local_icons_path.as_ptr());
+                let local_symbolic_path = CString::new("data/icons/hicolor/symbolic/apps").unwrap();
+                (b.gtk_icon_theme_add_search_path)(icon_theme, local_symbolic_path.as_ptr());
                 let app_icons_path = CString::new("/app/share/icons").unwrap();
                 (b.gtk_icon_theme_add_search_path)(icon_theme, app_icons_path.as_ptr());
             }
         }
 
         let app_id = CString::new("io.github.antux912012.Vingilot").unwrap();
-        let app = (b.adw_application_new)(app_id.as_ptr(), 0);
+        let app_flags = if is_incognito { 32 } else { 0 }; // 32 = G_APPLICATION_NON_UNIQUE
+        let app = (b.adw_application_new)(app_id.as_ptr(), app_flags);
         if app.is_null() {
             return false;
         }
