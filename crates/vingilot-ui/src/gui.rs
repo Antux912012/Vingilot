@@ -4683,6 +4683,9 @@ unsafe fn navigate_to_url(url: &str) {
 }
 
 unsafe fn apply_css_to_display(css: &str) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -4785,26 +4788,44 @@ unsafe extern "C" fn on_search_ecosia_clicked(_b: *mut c_void, _u: *mut c_void) 
 
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_system_clicked(_b: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_css_to_display(crate::theme::base_css());
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_light_clicked(_b: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa !important; color: #111111 !important; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_dark_clicked(_b: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #242424 !important; color: #ffffff !important; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_true_black_clicked(_b: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_css_to_display(crate::theme::AppTheme::TrueBlack.custom_css().unwrap_or(""));
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_incognito_blue_clicked(_b: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_css_to_display(crate::theme::incognito_css());
 }
 
 unsafe extern "C" fn on_theme_swatch_system_toggled(btn: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(bindings) => bindings,
         None => return,
@@ -4822,6 +4843,9 @@ unsafe extern "C" fn on_theme_swatch_system_toggled(btn: *mut c_void, _u: *mut c
 }
 
 unsafe extern "C" fn on_theme_swatch_light_toggled(btn: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(bindings) => bindings,
         None => return,
@@ -4839,6 +4863,9 @@ unsafe extern "C" fn on_theme_swatch_light_toggled(btn: *mut c_void, _u: *mut c_
 }
 
 unsafe extern "C" fn on_theme_swatch_nord_toggled(btn: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(bindings) => bindings,
         None => return,
@@ -4864,6 +4891,9 @@ unsafe extern "C" fn on_theme_swatch_nord_toggled(btn: *mut c_void, _u: *mut c_v
 }
 
 unsafe extern "C" fn on_theme_swatch_dark_toggled(btn: *mut c_void, _u: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(bindings) => bindings,
         None => return,
@@ -6076,6 +6106,9 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
 }
 
 pub unsafe fn apply_accent_color(hex_or_name: &str) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -6117,6 +6150,9 @@ pub unsafe fn apply_accent_color(hex_or_name: &str) {
 }
 
 unsafe fn apply_start_page_accent(name: &str) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     apply_accent_color(name);
 }
 
@@ -6129,6 +6165,9 @@ fn load_saved_accent() -> String {
 }
 
 unsafe extern "C" fn on_hue_slider_changed(range: *mut c_void, _user_data: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -6147,6 +6186,9 @@ unsafe extern "C" fn on_hue_slider_changed(range: *mut c_void, _user_data: *mut 
 }
 
 unsafe extern "C" fn on_nord_slider_changed(range: *mut c_void, _user_data: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let b = match BINDINGS.get() {
         Some(b) => b,
         None => return,
@@ -6185,6 +6227,9 @@ unsafe extern "C" fn on_search_engine_toggled(button: *mut c_void, user_data: *m
 
 #[allow(dead_code)]
 unsafe extern "C" fn on_accent_button_clicked(_button: *mut c_void, user_data: *mut c_void) {
+    if IS_INCOGNITO.load(Ordering::SeqCst) {
+        return;
+    }
     let idx = user_data as usize;
     if let Some((_name, hex, _)) = GNOME_ACCENTS.get(idx) {
         apply_accent_color(hex);
@@ -7708,20 +7753,28 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
                 );
             }
         }
-        let mut accent_provider = ACCENT_CSS_PROVIDER.load(Ordering::SeqCst);
-        if accent_provider.is_null() {
-            accent_provider = (b.gtk_css_provider_new)();
-            ACCENT_CSS_PROVIDER.store(accent_provider, Ordering::SeqCst);
-            (b.gtk_style_context_add_provider_for_display)(
-                display,
-                accent_provider,
-                601, // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1
-            );
+
+        if !is_incognito {
+            let mut accent_provider = ACCENT_CSS_PROVIDER.load(Ordering::SeqCst);
+            if accent_provider.is_null() {
+                accent_provider = (b.gtk_css_provider_new)();
+                ACCENT_CSS_PROVIDER.store(accent_provider, Ordering::SeqCst);
+                (b.gtk_style_context_add_provider_for_display)(
+                    display,
+                    accent_provider,
+                    601, // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1
+                );
+            }
         }
     }
 
     if is_incognito {
+        (b.gtk_widget_add_css_class)(win, CString::new("incognito-window").unwrap().as_ptr());
         (b.gtk_widget_add_css_class)(win, CString::new("incognito").unwrap().as_ptr());
+        let style_mgr = (b.adw_style_manager_get_default)();
+        if !style_mgr.is_null() {
+            (b.adw_style_manager_set_color_scheme)(style_mgr, 4); // ADW_COLOR_SCHEME_FORCE_DARK
+        }
     }
 
     let profile_storage = crate::profiles::ProfileStorage::load_or_default();
@@ -8322,7 +8375,9 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     } else {
         0
     };
-    if current_scheme == 1 {
+    if is_incognito {
+        (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
+    } else if current_scheme == 1 {
         (b.gtk_toggle_button_set_active)(btn_swatch_light, 1);
     } else if current_scheme == 4 {
         (b.gtk_toggle_button_set_active)(btn_swatch_dark, 1);
@@ -8339,6 +8394,14 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     (b.gtk_box_append)(swatches_box, btn_swatch_nord);
     (b.gtk_box_append)(swatches_box, btn_swatch_dark);
     (b.gtk_box_append)(popover_box, swatches_box);
+
+    if is_incognito {
+        if let Some(set_sens) = b.gtk_widget_set_sensitive {
+            set_sens(swatches_box, 0);
+        }
+        let tooltip = CString::new("Theme customization is disabled in Incognito mode.").unwrap();
+        (b.gtk_widget_set_tooltip_text)(swatches_box, tooltip.as_ptr());
+    }
 
     // Compact Hue and Nord Sliders
     let lbl_hue = (b.gtk_label_new)(
@@ -8382,14 +8445,24 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     ACTIVE_NORD_SCALE.store(nord_scale, Ordering::SeqCst);
     (b.gtk_box_append)(popover_box, nord_scale);
 
-    let saved_accent = load_saved_accent();
-    if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| {
-        n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)
-    }) {
-        (b.gtk_range_set_value)(nord_scale, idx as f64);
-        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
-        if let Ok(c_text) = CString::new(text) {
-            (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
+    if is_incognito {
+        if let Some(set_sens) = b.gtk_widget_set_sensitive {
+            set_sens(hue_scale, 0);
+            set_sens(nord_scale, 0);
+        }
+        let tooltip = CString::new("Theme customization is disabled in Incognito mode.").unwrap();
+        (b.gtk_widget_set_tooltip_text)(hue_scale, tooltip.as_ptr());
+        (b.gtk_widget_set_tooltip_text)(nord_scale, tooltip.as_ptr());
+    } else {
+        let saved_accent = load_saved_accent();
+        if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| {
+            n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)
+        }) {
+            (b.gtk_range_set_value)(nord_scale, idx as f64);
+            let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+            if let Ok(c_text) = CString::new(text) {
+                (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
+            }
         }
     }
 

@@ -13,6 +13,7 @@ pub struct VingilotWindow {
     address_input: String,
     default_search_url: String,
     accent_color: Option<String>,
+    is_incognito: bool,
 }
 
 impl Default for VingilotWindow {
@@ -33,7 +34,19 @@ impl VingilotWindow {
             address_input: String::new(),
             default_search_url: "https://duckduckgo.com/?q=%s".to_string(),
             accent_color: None,
+            is_incognito: false,
         }
+    }
+
+    /// Creates a new incognito window controller initialized with immutable True-Black styling.
+    pub fn new_incognito(app_id: &str, title: &str) -> Self {
+        let mut win = Self::new(app_id, title);
+        win.is_incognito = true;
+        win
+    }
+
+    pub fn is_incognito(&self) -> bool {
+        self.is_incognito
     }
 
     pub fn app_id(&self) -> &str {
@@ -85,7 +98,11 @@ impl VingilotWindow {
     }
 
     /// Applies an accent color to window chrome and sidebar, returning the corresponding CSS.
+    /// In incognito mode, accent color customization is guarded and immutable.
     pub fn apply_accent_color(&mut self, hex_color: &str) -> String {
+        if self.is_incognito {
+            return String::new();
+        }
         self.accent_color = Some(hex_color.to_string());
         format!(
             ".browser-chrome {{\n    background-image: linear-gradient(135deg, alpha({}, 0.22), alpha({}, 0.08));\n    transition: background-image 200ms ease;\n}}\n.tab-row.active, .sidebar-tab.active {{\n    background-color: alpha({}, 0.28);\n}}",
@@ -245,5 +262,14 @@ mod tests {
         assert!(css.contains(".browser-chrome"));
         assert!(css.contains("alpha(#3584e4, 0.22)"));
         assert!(css.contains(".tab-row.active, .sidebar-tab.active"));
+    }
+
+    #[test]
+    fn test_incognito_window_accent_guard() {
+        let mut win = VingilotWindow::new_incognito("io.github.antux912012.Vingilot", "Vingilot — Incognito");
+        assert!(win.is_incognito());
+        let css = win.apply_accent_color("#3584e4");
+        assert!(css.is_empty());
+        assert_eq!(win.accent_color(), None);
     }
 }

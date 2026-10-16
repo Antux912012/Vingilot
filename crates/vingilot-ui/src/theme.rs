@@ -465,11 +465,27 @@ pub fn base_css() -> &'static str {
         opacity: 1.0;
         background-color: alpha(currentColor, 0.08);
     }
+
+    /* Immutable True-Black Incognito Mode */
+    .incognito-window {
+        background-color: #000000;
+        color: #ffffff;
+        --accent-bg-color: #1e1e1e;
+        --accent-fg-color: #ffffff;
+        --window-bg-color: #000000;
+        --view-bg-color: #050505;
+        --headerbar-bg-color: #0a0a0a;
+    }
+
+    .incognito-window headerbar {
+        background-color: #0a0a0a;
+        border-bottom: 1px solid #1a1a1a;
+    }
     "#
 }
 
-/// Official brand color for Incognito window background.
-pub const INCOGNITO_WINDOW_COLOR: &str = "#062640";
+/// Official brand color for Incognito window background (True-Black).
+pub const INCOGNITO_WINDOW_COLOR: &str = "#000000";
 
 /// Official brand color for Incognito corner icon.
 pub const INCOGNITO_ICON_COLOR: &str = "#ffc95c";
@@ -477,57 +493,77 @@ pub const INCOGNITO_ICON_COLOR: &str = "#ffc95c";
 /// Returns CSS rules specifically for the Incognito private browsing mode.
 pub fn incognito_css() -> &'static str {
     r#"
-    /* Vingilot Incognito Mode */
-    window, .background {
-        background-color: #062640 !important;
-        color: #e0e8f0;
+    /* Vingilot Immutable True-Black Incognito Mode */
+    .incognito-window,
+    window.incognito,
+    window.incognito-window {
+        background-color: #000000 !important;
+        color: #ffffff !important;
+        --accent-bg-color: #1e1e1e !important;
+        --accent-fg-color: #ffffff !important;
+        --window-bg-color: #000000 !important;
+        --view-bg-color: #050505 !important;
+        --headerbar-bg-color: #0a0a0a !important;
     }
 
-    headerbar, .header-bar {
-        background-color: #062640 !important;
-        border-bottom: 1px solid rgba(255, 201, 92, 0.2) !important;
+    .incognito-window headerbar,
+    window.incognito headerbar,
+    window.incognito-window headerbar,
+    .incognito-window .header-bar {
+        background-color: #0a0a0a !important;
+        border-bottom: 1px solid #1a1a1a !important;
         box-shadow: none;
     }
 
-    .sidebar, sidebar {
-        background-color: #062640 !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    .incognito-window .sidebar,
+    .incognito-window sidebar,
+    window.incognito .sidebar,
+    window.incognito sidebar {
+        background-color: #000000 !important;
+        border-right: 1px solid #1a1a1a !important;
     }
 
-    .right-sidebar {
-        background-color: #062640 !important;
-        border-left: 1px solid rgba(255, 255, 255, 0.12) !important;
-        min-width: 360px;
+    .incognito-window paned,
+    window.incognito paned {
+        background-color: #000000 !important;
     }
 
-    .menu-group-card {
-        background-color: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        margin: 6px 12px;
-        padding: 10px 12px;
+    .incognito-window paned > :last-child,
+    window.incognito paned > :last-child {
+        background-color: #050505 !important;
+        border-top: 1px solid #1a1a1a !important;
     }
 
-    .menu-group-title {
-        font-weight: 700;
-        font-size: 13px;
-        margin-bottom: 6px;
-        color: #ffc95c !important;
-    }
-
-    paned {
-        background-color: #062640 !important;
-    }
-
-    paned > :last-child {
-        background-color: #062640 !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    entry, .address-entry {
-        background-color: #0a3355 !important;
+    .incognito-window entry,
+    .incognito-window .address-entry,
+    window.incognito entry,
+    window.incognito .address-entry {
+        background-color: #0a0a0a !important;
         color: #ffffff !important;
-        border: 1px solid #144973 !important;
+        border: 1px solid #222222 !important;
+    }
+
+    .incognito-window .browser-chrome,
+    window.incognito .browser-chrome {
+        background-image: none !important;
+        background-color: #0a0a0a !important;
+    }
+
+    .incognito-window .tab-row.active,
+    .incognito-window .sidebar-tab.active,
+    .incognito-window .sidebar-tab.suggested-action,
+    .incognito-window button.suggested-action,
+    window.incognito .tab-row.active,
+    window.incognito .sidebar-tab.active,
+    window.incognito .sidebar-tab.suggested-action,
+    window.incognito button.suggested-action {
+        background-color: #1e1e1e !important;
+        color: #ffffff !important;
+    }
+
+    .incognito-window .start-page-container,
+    window.incognito .start-page-container {
+        background: #000000 !important;
     }
 
     .incognito-corner-icon,
@@ -597,11 +633,23 @@ mod tests {
 
     #[test]
     fn test_incognito_theme_css_colors() {
-        assert_eq!(INCOGNITO_WINDOW_COLOR, "#062640");
+        assert_eq!(INCOGNITO_WINDOW_COLOR, "#000000");
         assert_eq!(INCOGNITO_ICON_COLOR, "#ffc95c");
         let css = incognito_css();
-        assert!(css.contains("#062640"));
+        assert!(css.contains("#000000"));
+        assert!(css.contains("#0a0a0a"));
+        assert!(css.contains("#1e1e1e"));
         assert!(css.contains("#ffc95c"));
+        assert!(css.contains(".incognito-window"));
+    }
+
+    #[test]
+    fn test_base_css_contains_incognito_window_rules() {
+        let css = base_css();
+        assert!(css.contains(".incognito-window"));
+        assert!(css.contains("--window-bg-color: #000000;"));
+        assert!(css.contains("--accent-bg-color: #1e1e1e;"));
+        assert!(css.contains("--headerbar-bg-color: #0a0a0a;"));
     }
 
     #[test]
