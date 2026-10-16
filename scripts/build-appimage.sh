@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 ARCH="x86_64"
 DIST_DIR="${ROOT_DIR}/dist"
 APPDIR="${ROOT_DIR}/build/appimage/Vingilot.AppDir"
@@ -31,6 +31,7 @@ install -Dm755 "${ROOT_DIR}/target/release/vingilot-cli" "${APPDIR}/usr/bin/ving
 echo "==> Installing desktop and metainfo files..."
 install -Dm644 "${ROOT_DIR}/data/io.github.antux912012.Vingilot.desktop" "${APPDIR}/usr/share/applications/io.github.antux912012.Vingilot.desktop"
 install -Dm644 "${ROOT_DIR}/data/io.github.antux912012.Vingilot.metainfo.xml" "${APPDIR}/usr/share/metainfo/io.github.antux912012.Vingilot.metainfo.xml"
+install -Dm644 "${ROOT_DIR}/data/io.github.antux912012.Vingilot.metainfo.xml" "${APPDIR}/usr/share/metainfo/io.github.antux912012.Vingilot.appdata.xml"
 
 # Root-level desktop file and icons required by AppImage specification
 cp "${ROOT_DIR}/data/io.github.antux912012.Vingilot.desktop" "${APPDIR}/"

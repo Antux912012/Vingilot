@@ -22,7 +22,22 @@ impl<'a> SearchEngineManager<'a> {
     pub fn initialize_defaults(&self) -> CoreResult<Vec<SearchEngine>> {
         let existing = self.repo.list_all()?;
         if !existing.is_empty() {
-            return Ok(existing);
+            // Ensure /e (Ecosia) is seeded even on existing databases if missing
+            if !existing
+                .iter()
+                .any(|e| e.shortcut.as_deref() == Some("/e") || e.name.eq_ignore_ascii_case("Ecosia"))
+            {
+                let ecosia = SearchEngine {
+                    id: Uuid::new_v4(),
+                    name: "Ecosia".to_string(),
+                    search_url: "https://www.ecosia.org/search?q=%s".to_string(),
+                    shortcut: Some("/e".to_string()),
+                    is_default: false,
+                    created_at: Utc::now(),
+                };
+                self.repo.insert(&ecosia)?;
+            }
+            return self.repo.list_all();
         }
 
         let defaults = vec![
@@ -48,6 +63,12 @@ impl<'a> SearchEngineManager<'a> {
                 "Brave Search",
                 "https://search.brave.com/search?q=%s",
                 Some("/br"),
+                false,
+            ),
+            (
+                "Ecosia",
+                "https://www.ecosia.org/search?q=%s",
+                Some("/e"),
                 false,
             ),
             (
@@ -155,7 +176,7 @@ mod tests {
         let db = Database::in_memory().unwrap();
         let mgr = SearchEngineManager::new(&db);
         let list = mgr.initialize_defaults().unwrap();
-        assert_eq!(list.len(), 6);
+        assert_eq!(list.len(), 7);
 
         // Test default query
         let q1 = mgr.resolve_query("rust language").unwrap();
@@ -178,5 +199,9 @@ mod tests {
             q4,
             "https://www.youtube.com/results?search_query=rust+conference"
         );
+
+        // Test Ecosia prefix
+        let q5 = mgr.resolve_query("/e plant trees").unwrap();
+        assert_eq!(q5, "https://www.ecosia.org/search?q=plant+trees");
     }
 }

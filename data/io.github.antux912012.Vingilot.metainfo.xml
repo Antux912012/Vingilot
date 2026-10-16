@@ -16,6 +16,15 @@
   <url type="homepage">https://github.com/Antux912012/Vingilot</url>
   <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
   <releases>
+    <release version="0.1.3" date="2026-10-16">
+      <description>
+        <p>
+          Version 0.1.3 featuring persistent CSS theme providers, Nord Frost and dark appearance
+          persistence, multi-engine prefix shortcuts (/e for Ecosia), interactive Find in Page popover,
+          global keyboard accelerators, incognito sidebar toggle, and live preferences integration.
+        </p>
+      </description>
+    </release>
     <release version="0.1.2-b" date="2026-10-12">
       <description>
         <p>

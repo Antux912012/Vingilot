@@ -5,13 +5,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="0.1.2"
+VERSION="0.1.3"
 REVISION="1"
 ARCH="amd64"
 PKG_NAME="vingilot"
-DEB_NAME="${PKG_NAME}_${VERSION}-${REVISION}_${ARCH}.deb"
+DEB_NAME="${PKG_NAME}_${VERSION}_${ARCH}.deb"
 DIST_DIR="${ROOT_DIR}/dist"
-STAGE_DIR="${ROOT_DIR}/build/deb/${PKG_NAME}_${VERSION}-${REVISION}_${ARCH}"
+STAGE_DIR="${ROOT_DIR}/build/deb/${PKG_NAME}_${VERSION}_${ARCH}"
 
 echo "==> Building release binaries with cargo..."
 cargo build --release
@@ -98,6 +98,7 @@ chmod 755 "${STAGE_DIR}/DEBIAN/postrm"
 
 echo "==> Building .deb package using dpkg-deb..."
 dpkg-deb --build --root-owner-group "$STAGE_DIR" "${DIST_DIR}/${DEB_NAME}"
+ln -sf "${DEB_NAME}" "${DIST_DIR}/${PKG_NAME}_${VERSION}-${REVISION}_${ARCH}.deb"
 
 echo "==> Debian package created successfully: ${DIST_DIR}/${DEB_NAME}"
 ls -lh "${DIST_DIR}/${DEB_NAME}"

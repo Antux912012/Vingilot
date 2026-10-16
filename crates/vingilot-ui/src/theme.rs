@@ -589,6 +589,32 @@ pub fn incognito_css() -> &'static str {
     "#
 }
 
+/// Returns custom CSS for the Nord Frost appearance.
+pub fn nord_css() -> &'static str {
+    r#"
+    /* Vingilot Nord Frost Theme */
+    @define-color accent_color #88C0D0;
+    @define-color accent_bg_color #88C0D0;
+    window, .background {
+        background-color: #2E3440;
+        color: #ECEFF4;
+    }
+    headerbar, .header-bar, .browser-chrome {
+        background-color: #2E3440;
+        border-bottom: 1px solid #3B4252;
+    }
+    .sidebar, sidebar {
+        background-color: #2E3440;
+        border-right: 1px solid #3B4252;
+    }
+    entry, .address-entry {
+        background-color: #3B4252;
+        color: #ECEFF4;
+        border: 1px solid #4C566A;
+    }
+    "#
+}
+
 /// Theme manager coordinating window theme switching.
 #[derive(Debug, Clone, Default)]
 pub struct ThemeManager {

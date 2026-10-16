@@ -178,6 +178,16 @@ impl AdBlockManager {
         self.blocked_requests_count
     }
 
+    pub fn rule_count(&self) -> usize {
+        let bundled = self.get_bundled_rules().len();
+        let list_rules: usize = self.filter_lists.iter().map(|l| l.rule_count).sum();
+        if list_rules > 0 {
+            list_rules
+        } else {
+            bundled
+        }
+    }
+
     pub fn increment_blocked_requests(&mut self) {
         self.blocked_requests_count = self.blocked_requests_count.saturating_add(1);
     }

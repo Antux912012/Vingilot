@@ -211,7 +211,7 @@ mod tests {
         let manifest = SyncManifest {
             schema_version: 1,
             application: "Vingilot".to_string(),
-            app_version: "0.1.0".to_string(),
+            app_version: "0.1.3".to_string(),
             created_at: Utc::now(),
             device: DeviceIdentity {
                 device_id: Uuid::new_v4(),

@@ -69,7 +69,7 @@ Native `.deb` package for Debian, Ubuntu, Linux Mint, Pop!_OS, and other Debian 
 ./scripts/build-deb.sh
 
 # Install the generated .deb package
-sudo apt install ./dist/vingilot_0.1.2-1_amd64.deb
+sudo apt install ./dist/vingilot_0.1.3_amd64.deb
 
 # Run Vingilot
 vingilot-ui
@@ -82,8 +82,8 @@ Zero-install, single-file executable for 64-bit Linux:
 ./scripts/build-appimage.sh
 
 # Make executable and run
-chmod +x ./dist/Vingilot-0.1.2-x86_64.AppImage
-./dist/Vingilot-0.1.2-x86_64.AppImage
+chmod +x ./dist/Vingilot-0.1.3-x86_64.AppImage
+./dist/Vingilot-0.1.3-x86_64.AppImage
 ```
 
 You can also build both `.deb` and `.AppImage` packages simultaneously using:

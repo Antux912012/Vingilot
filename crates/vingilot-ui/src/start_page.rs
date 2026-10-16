@@ -57,6 +57,44 @@ impl Default for StartPageModel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchProvider {
+    DuckDuckGo,
+    Google,
+    Bing,
+    Brave,
+    Ecosia,
+    YouTube,
+    Wikipedia,
+}
+
+impl SearchProvider {
+    pub fn from_shortcut(prefix: &str) -> Option<Self> {
+        match prefix {
+            "/d" => Some(Self::DuckDuckGo),
+            "/g" => Some(Self::Google),
+            "/b" => Some(Self::Bing),
+            "/br" => Some(Self::Brave),
+            "/e" => Some(Self::Ecosia),
+            "/y" => Some(Self::YouTube),
+            "/w" => Some(Self::Wikipedia),
+            _ => None,
+        }
+    }
+
+    pub fn search_url(&self) -> &'static str {
+        match self {
+            Self::DuckDuckGo => "https://duckduckgo.com/?q=%s",
+            Self::Google => "https://www.google.com/search?q=%s",
+            Self::Bing => "https://www.bing.com/search?q=%s",
+            Self::Brave => "https://search.brave.com/search?q=%s",
+            Self::Ecosia => "https://www.ecosia.org/search?q=%s",
+            Self::YouTube => "https://www.youtube.com/results?search_query=%s",
+            Self::Wikipedia => "https://en.wikipedia.org/wiki/Special:Search?search=%s",
+        }
+    }
+}
+
 impl StartPageModel {
     pub fn new() -> Self {
         Self::default()
@@ -127,6 +165,18 @@ impl StartPageModel {
         let trimmed = input.trim();
         if trimmed.is_empty() {
             return None;
+        }
+
+        let shortcuts = ["/d ", "/g ", "/b ", "/br ", "/e ", "/y ", "/w "];
+        for prefix_space in shortcuts {
+            if trimmed.starts_with(prefix_space) {
+                let prefix = prefix_space.trim_end();
+                if let Some(provider) = SearchProvider::from_shortcut(prefix) {
+                    let query = trimmed[prefix_space.len()..].trim();
+                    let encoded = urlencoding_simple(query);
+                    return Some(provider.search_url().replace("%s", &encoded));
+                }
+            }
         }
 
         if Self::input_is_url(trimmed) {
@@ -599,5 +649,30 @@ mod tests {
             .unwrap();
         assert_eq!(deleted, 2); // folder + bm
         assert_eq!(model.bookmark_items.len(), 0);
+    }
+
+    #[test]
+    fn test_resolve_search_input_shortcuts_and_defaults() {
+        let model = StartPageModel::default();
+
+        // Standard query falling back to default DuckDuckGo
+        let q1 = model.resolve_search_input("rust language").unwrap();
+        assert_eq!(q1, "https://duckduckgo.com/?q=rust+language");
+
+        // /e shortcut (Ecosia)
+        let q_ecosia = model.resolve_search_input("/e rust").unwrap();
+        assert_eq!(q_ecosia, "https://www.ecosia.org/search?q=rust");
+
+        // /g shortcut (Google)
+        let q_google = model.resolve_search_input("/g rust").unwrap();
+        assert_eq!(q_google, "https://www.google.com/search?q=rust");
+
+        // /br shortcut (Brave)
+        let q_brave = model.resolve_search_input("/br rust compiler").unwrap();
+        assert_eq!(q_brave, "https://search.brave.com/search?q=rust+compiler");
+
+        // Direct URL
+        let q_url = model.resolve_search_input("example.com").unwrap();
+        assert_eq!(q_url, "https://example.com");
     }
 }
