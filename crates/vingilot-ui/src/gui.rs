@@ -4917,14 +4917,14 @@ unsafe extern "C" fn on_theme_light_clicked(_b: *mut c_void, _u: *mut c_void) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
     }
-    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa !important; color: #111111 !important; }");
+    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa; color: #111111; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_dark_clicked(_b: *mut c_void, _u: *mut c_void) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
     }
-    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #242424 !important; color: #ffffff !important; }");
+    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #242424; color: #ffffff; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_true_black_clicked(_b: *mut c_void, _u: *mut c_void) {
@@ -6537,6 +6537,10 @@ fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     )
 }
 
+/// Applies accent color CSS to the default GDK display.
+///
+/// # Safety
+/// Caller must ensure GTK4 and GDK are initialized on the main GUI thread.
 pub unsafe fn apply_accent_color(hex_or_name: &str) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
@@ -7156,7 +7160,7 @@ unsafe fn ensure_profile_popover(b: &GtkBindings) -> *mut c_void {
 }
 
 unsafe extern "C" fn on_profile_popover_cancel(_button: *mut c_void, user_data: *mut c_void) {
-    let popover = user_data as *mut c_void;
+    let popover = user_data;
     if !popover.is_null() {
         if let Some(b) = BINDINGS.get() {
             (b.gtk_popover_popdown)(popover);
@@ -7499,7 +7503,7 @@ unsafe extern "C" fn on_profile_rename_save(_button: *mut c_void, user_data: *mu
         Some(b) => b,
         None => return,
     };
-    let popover = user_data as *mut c_void;
+    let popover = user_data;
     let entry = ACTIVE_PROFILE_RENAME_ENTRY.swap(std::ptr::null_mut(), Ordering::SeqCst);
     if !entry.is_null() {
         let text_ptr = (b.gtk_editable_get_text)(entry);
@@ -7771,7 +7775,7 @@ unsafe extern "C" fn on_profile_create_save(_button: *mut c_void, user_data: *mu
         Some(b) => b,
         None => return,
     };
-    let popover = user_data as *mut c_void;
+    let popover = user_data;
     let entry = ACTIVE_PROFILE_CREATE_NAME_ENTRY.swap(std::ptr::null_mut(), Ordering::SeqCst);
 
     let name = if !entry.is_null() {
@@ -9349,15 +9353,16 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         btn_ddg,
         toggled_sig.as_ptr(),
         cb_search_toggle,
-        0 as *mut c_void,
+        std::ptr::null_mut(),
         std::ptr::null_mut(),
         0,
     );
+    #[allow(clippy::manual_dangling_ptr)]
     (b.g_signal_connect_data)(
         btn_google,
         toggled_sig.as_ptr(),
         cb_search_toggle,
-        1 as *mut c_void,
+        (1usize) as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
@@ -9365,7 +9370,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         btn_brave,
         toggled_sig.as_ptr(),
         cb_search_toggle,
-        2 as *mut c_void,
+        (2usize) as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
@@ -9373,7 +9378,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         btn_bing,
         toggled_sig.as_ptr(),
         cb_search_toggle,
-        3 as *mut c_void,
+        (3usize) as *mut c_void,
         std::ptr::null_mut(),
         0,
     );
@@ -9381,7 +9386,7 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
         btn_ecosia,
         toggled_sig.as_ptr(),
         cb_search_toggle,
-        4 as *mut c_void,
+        (4usize) as *mut c_void,
         std::ptr::null_mut(),
         0,
     );

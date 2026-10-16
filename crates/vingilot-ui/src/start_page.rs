@@ -169,10 +169,10 @@ impl StartPageModel {
 
         let shortcuts = ["/d ", "/g ", "/b ", "/br ", "/e ", "/y ", "/w "];
         for prefix_space in shortcuts {
-            if trimmed.starts_with(prefix_space) {
+            if let Some(rest) = trimmed.strip_prefix(prefix_space) {
                 let prefix = prefix_space.trim_end();
                 if let Some(provider) = SearchProvider::from_shortcut(prefix) {
-                    let query = trimmed[prefix_space.len()..].trim();
+                    let query = rest.trim();
                     let encoded = urlencoding_simple(query);
                     return Some(provider.search_url().replace("%s", &encoded));
                 }

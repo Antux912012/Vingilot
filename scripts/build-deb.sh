@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="0.1.3"
+VERSION="0.1.4"
 REVISION="1"
 ARCH="amd64"
 PKG_NAME="vingilot"

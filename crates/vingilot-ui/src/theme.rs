@@ -89,23 +89,22 @@ pub fn base_css() -> &'static str {
     popover.menu > contents,
     .popup-container > contents,
     .vingilot-menu > contents {
-        background-color: rgba(30, 35, 45, 0.75) !important; /* Adjust alpha for desired transparency */
+        background-color: rgba(30, 35, 45, 0.75); /* Adjust alpha for desired transparency */
         backdrop-filter: blur(20px) saturate(180%);
-        -webkit-backdrop-filter: blur(20px) saturate(180%);
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         border-radius: 14px;
     }
 
     popover.vingilot-menu > arrow,
     .vingilot-menu > arrow {
-        background-color: rgba(30, 35, 45, 0.75) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background-color: rgba(30, 35, 45, 0.75);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .vingilot-menu-box {
-        background-color: transparent !important;
-        background: transparent !important;
+        background-color: transparent;
+        background: transparent;
     }
 
     headerbar {
@@ -279,9 +278,6 @@ pub fn base_css() -> &'static str {
 
     /* Container for top circles */
     .vingilot-top-selectors {
-        display: flex;
-        justify-content: space-around;
-        align-items: center;
         padding: 8px;
     }
 
@@ -289,13 +285,10 @@ pub fn base_css() -> &'static str {
     .vingilot-selector-circle,
     button.vingilot-selector-circle,
     button.theme-swatch {
-        width: 24px;
-        height: 24px;
         min-width: 24px;
         min-height: 24px;
         border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.2) !important;
-        cursor: pointer;
+        border: 2px solid rgba(255, 255, 255, 0.2);
         padding: 0;
         margin: 0 6px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -306,14 +299,14 @@ pub fn base_css() -> &'static str {
     button.vingilot-selector-circle:hover,
     button.theme-swatch:hover {
         transform: scale(1.1);
-        border-color: #1f80e0 !important;
+        border-color: #1f80e0;
     }
 
     button.vingilot-selector-circle:checked,
     button.theme-swatch:checked {
         outline: 2px solid #1f80e0;
         outline-offset: 2px;
-        border-color: #1f80e0 !important;
+        border-color: #1f80e0;
     }
 
     button.vingilot-selector-circle image,
@@ -329,46 +322,46 @@ pub fn base_css() -> &'static str {
     /* 1. Half White and Half Black (Auto / Dynamic) */
     .vingilot-selector-circle:nth-child(1),
     button.theme-swatch-system {
-        background: linear-gradient(90deg, #ffffff 50%, #000000 50%) !important;
+        background-image: linear-gradient(90deg, #ffffff 50%, #000000 50%);
     }
     .vingilot-selector-circle:nth-child(1):checked image,
     button.theme-swatch-system:checked image {
-        color: #1f80e0 !important;
+        color: #1f80e0;
         -gtk-icon-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
     }
 
     /* 2. White (Light Mode) */
     .vingilot-selector-circle:nth-child(2),
     button.theme-swatch-light {
-        background-color: #ffffff !important;
-        background: #ffffff !important;
+        background-color: #ffffff;
+        background: #ffffff;
     }
     .vingilot-selector-circle:nth-child(2):checked image,
     button.theme-swatch-light:checked image {
-        color: #121212 !important;
+        color: #121212;
     }
 
     /* 3. Black (Dark Mode Neutral) */
     .vingilot-selector-circle:nth-child(3),
     button.theme-swatch-dark {
-        background-color: #1e1e1e !important;
-        background: #1e1e1e !important;
+        background-color: #1e1e1e;
+        background: #1e1e1e;
     }
     .vingilot-selector-circle:nth-child(3):checked image,
     button.theme-swatch-dark:checked image {
-        color: #ffffff !important;
+        color: #ffffff;
     }
 
     /* 4. True Black (OLED) */
     .vingilot-selector-circle:nth-child(4),
     button.theme-swatch-true-black {
-        background-color: #000000 !important;
-        background: #000000 !important;
-        border-color: rgba(255, 255, 255, 0.4) !important; /* Ensures visibility against dark background */
+        background-color: #000000;
+        background: #000000;
+        border-color: rgba(255, 255, 255, 0.4); /* Ensures visibility against dark background */
     }
     .vingilot-selector-circle:nth-child(4):checked image,
     button.theme-swatch-true-black:checked image {
-        color: #ffffff !important;
+        color: #ffffff;
     }
 
     /* Chrome/Apostrophe Style Menu Action Rows */
@@ -557,21 +550,21 @@ pub fn incognito_css() -> &'static str {
     .incognito-window,
     window.incognito,
     window.incognito-window {
-        background-color: #000000 !important;
-        color: #ffffff !important;
-        --accent-bg-color: #1e1e1e !important;
-        --accent-fg-color: #ffffff !important;
-        --window-bg-color: #000000 !important;
-        --view-bg-color: #050505 !important;
-        --headerbar-bg-color: #0a0a0a !important;
+        background-color: #000000;
+        color: #ffffff;
+        --accent-bg-color: #1e1e1e;
+        --accent-fg-color: #ffffff;
+        --window-bg-color: #000000;
+        --view-bg-color: #050505;
+        --headerbar-bg-color: #0a0a0a;
     }
 
     .incognito-window headerbar,
     window.incognito headerbar,
     window.incognito-window headerbar,
     .incognito-window .header-bar {
-        background-color: #0a0a0a !important;
-        border-bottom: 1px solid #1a1a1a !important;
+        background-color: #0a0a0a;
+        border-bottom: 1px solid #1a1a1a;
         box-shadow: none;
     }
 
@@ -579,34 +572,34 @@ pub fn incognito_css() -> &'static str {
     .incognito-window sidebar,
     window.incognito .sidebar,
     window.incognito sidebar {
-        background-color: #000000 !important;
-        border-right: 1px solid #1a1a1a !important;
+        background-color: #000000;
+        border-right: 1px solid #1a1a1a;
     }
 
     .incognito-window paned,
     window.incognito paned {
-        background-color: #000000 !important;
+        background-color: #000000;
     }
 
     .incognito-window paned > :last-child,
     window.incognito paned > :last-child {
-        background-color: #050505 !important;
-        border-top: 1px solid #1a1a1a !important;
+        background-color: #050505;
+        border-top: 1px solid #1a1a1a;
     }
 
     .incognito-window entry,
     .incognito-window .address-entry,
     window.incognito entry,
     window.incognito .address-entry {
-        background-color: #0a0a0a !important;
-        color: #ffffff !important;
-        border: 1px solid #222222 !important;
+        background-color: #0a0a0a;
+        color: #ffffff;
+        border: 1px solid #222222;
     }
 
     .incognito-window .browser-chrome,
     window.incognito .browser-chrome {
-        background-image: none !important;
-        background-color: #0a0a0a !important;
+        background-image: none;
+        background-color: #0a0a0a;
     }
 
     .incognito-window .tab-row.active,
@@ -617,19 +610,19 @@ pub fn incognito_css() -> &'static str {
     window.incognito .sidebar-tab.active,
     window.incognito .sidebar-tab.suggested-action,
     window.incognito button.suggested-action {
-        background-color: #1e1e1e !important;
-        color: #ffffff !important;
+        background-color: #1e1e1e;
+        color: #ffffff;
     }
 
     .incognito-window .start-page-container,
     window.incognito .start-page-container {
-        background: #000000 !important;
+        background: #000000;
     }
 
     .incognito-corner-icon,
     .incognito-corner-icon image,
     .incognito-corner-icon label {
-        color: #ffc95c !important;
+        color: #ffc95c;
         -gtk-icon-palette: error #ffc95c, success #ffc95c, warning #ffc95c;
     }
 
@@ -637,7 +630,7 @@ pub fn incognito_css() -> &'static str {
         background: transparent;
         border: none;
         box-shadow: none;
-        color: #ffc95c !important;
+        color: #ffc95c;
         padding: 4px 8px;
         margin-left: 6px;
         margin-right: 6px;
@@ -762,9 +755,8 @@ mod tests {
         let css = base_css();
         assert!(css.contains(".vingilot-menu"));
         assert!(css.contains("popover.menu"));
-        assert!(css.contains("rgba(30, 35, 45, 0.75) !important"));
+        assert!(css.contains("rgba(30, 35, 45, 0.75)"));
         assert!(css.contains("backdrop-filter: blur(20px) saturate(180%)"));
-        assert!(css.contains("-webkit-backdrop-filter: blur(20px) saturate(180%)"));
         assert!(css.contains("border: 1px solid rgba(255, 255, 255, 0.1)"));
         assert!(css.contains("box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5)"));
     }
@@ -777,12 +769,12 @@ mod tests {
         // Circle 1: Split 50/50 white and black
         assert!(css.contains("linear-gradient(90deg, #ffffff 50%, #000000 50%)"));
         // Circle 2: Solid white
-        assert!(css.contains("#ffffff !important"));
+        assert!(css.contains("#ffffff"));
         // Circle 3: Dark neutral
-        assert!(css.contains("#1e1e1e !important"));
+        assert!(css.contains("#1e1e1e"));
         // Circle 4: True black with visible border
-        assert!(css.contains("#000000 !important"));
-        assert!(css.contains("border-color: rgba(255, 255, 255, 0.4) !important"));
+        assert!(css.contains("#000000"));
+        assert!(css.contains("border-color: rgba(255, 255, 255, 0.4)"));
     }
 }
 
