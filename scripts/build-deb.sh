@@ -64,6 +64,7 @@ Description: Native GTK4/Libadwaita Web Browser for Linux
 EOF
 
 chmod 644 "${STAGE_DIR}/DEBIAN/control"
+chmod 755 "${STAGE_DIR}/DEBIAN"
 
 echo "==> Generating DEBIAN/postinst & postrm..."
 cat <<'EOF' > "${STAGE_DIR}/DEBIAN/postinst"

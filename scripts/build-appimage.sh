@@ -91,9 +91,9 @@ export ARCH="x86_64"
 
 # Attempt standard run; fall back to --appimage-extract-and-run if FUSE is not enabled
 if "$TOOL_CMD" --version >/dev/null 2>&1; then
-    "$TOOL_CMD" "$APPDIR" "$OUTPUT_APPIMAGE"
+    "$TOOL_CMD" --no-appstream "$APPDIR" "$OUTPUT_APPIMAGE"
 else
-    "$TOOL_CMD" --appimage-extract-and-run "$APPDIR" "$OUTPUT_APPIMAGE"
+    "$TOOL_CMD" --appimage-extract-and-run --no-appstream "$APPDIR" "$OUTPUT_APPIMAGE"
 fi
 
 chmod +x "$OUTPUT_APPIMAGE"
