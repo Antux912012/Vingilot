@@ -24,7 +24,7 @@ impl AppTheme {
             Self::TrueBlack => Some(
                 r#"
                 /* Vingilot True Black AMOLED Mode */
-                window, .background {
+                window, window.background {
                     background-color: #000000;
                     color: #ffffff;
                 }
@@ -56,12 +56,16 @@ impl AppTheme {
 pub fn base_css() -> &'static str {
     r#"
     /* Unified Chrome Shell - Headerbar & Sidebar seamless integration */
-    window, .background {
+    window, window.background {
         background-color: @headerbar_bg_color;
     }
 
     popover,
-    popover.background {
+    popover.background,
+    .vingilot-menu,
+    popover.menu,
+    .popup-container,
+    popover.vingilot-menu {
         background: transparent;
         background-color: transparent;
         border: none;
@@ -80,16 +84,13 @@ pub fn base_css() -> &'static str {
         border: 1px solid alpha(white, 0.08);
     }
 
-    /* Target the main popup menu container */
-    .vingilot-menu, 
-    popover.menu, 
-    .popup-container,
-    popover.vingilot-menu,
+    /* Target the main popup menu inner contents container (never the outer popover shadow box) */
     popover.vingilot-menu > contents,
     popover.menu > contents,
     .popup-container > contents,
     .vingilot-menu > contents {
         background-color: rgba(30, 35, 45, 0.75); /* Adjust alpha for desired transparency */
+        color: #ffffff;
         backdrop-filter: blur(20px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -648,7 +649,7 @@ pub fn nord_css() -> &'static str {
     /* Vingilot Nord Frost Theme */
     @define-color accent_color #88C0D0;
     @define-color accent_bg_color #88C0D0;
-    window, .background {
+    window, window.background {
         background-color: #2E3440;
         color: #ECEFF4;
     }

@@ -4827,7 +4827,13 @@ unsafe fn apply_css_to_display(css: &str) {
                 display, provider, 600, // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
             );
         }
-        if let Ok(c_css) = CString::new(css) {
+        let base = crate::theme::base_css();
+        let combined = if css.trim().is_empty() || css == base {
+            base.to_string()
+        } else {
+            format!("{base}\n{css}")
+        };
+        if let Ok(c_css) = CString::new(combined) {
             (b.gtk_css_provider_load_from_string)(provider, c_css.as_ptr());
         }
     }
@@ -4917,14 +4923,14 @@ unsafe extern "C" fn on_theme_light_clicked(_b: *mut c_void, _u: *mut c_void) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
     }
-    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa; color: #111111; }");
+    apply_css_to_display("window, window.background, headerbar, .sidebar, .right-sidebar { background-color: #fafafa; color: #111111; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_dark_clicked(_b: *mut c_void, _u: *mut c_void) {
     if IS_INCOGNITO.load(Ordering::SeqCst) {
         return;
     }
-    apply_css_to_display("window, .background, headerbar, .sidebar, .right-sidebar { background-color: #242424; color: #ffffff; }");
+    apply_css_to_display("window, window.background, headerbar, .sidebar, .right-sidebar { background-color: #242424; color: #ffffff; }");
 }
 #[allow(dead_code)]
 unsafe extern "C" fn on_theme_true_black_clicked(_b: *mut c_void, _u: *mut c_void) {
@@ -6635,7 +6641,7 @@ unsafe extern "C" fn on_nord_slider_changed(range: *mut c_void, _user_data: *mut
     apply_accent_color(item.hex);
     let lbl = ACTIVE_NORD_DESC_LABEL.load(Ordering::SeqCst);
     if !lbl.is_null() {
-        let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+        let text = format!("Nord Palette: {} {}", item.name, item.hex);
         if let Ok(c_text) = CString::new(text) {
             (b.gtk_label_set_text)(lbl, c_text.as_ptr());
         }
@@ -9050,10 +9056,10 @@ unsafe extern "C" fn on_app_activate(app: *mut c_void, _user_data: *mut c_void) 
     } else {
         let saved_accent = load_saved_accent();
         if let Some((idx, item)) = NORD_PALETTE.iter().enumerate().find(|(_, n)| {
-            n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent)
+            n.hex.eq_ignore_ascii_case(&saved_accent) || n.name.eq_ignore_ascii_case(&saved_accent) || n.cluster.eq_ignore_ascii_case(&saved_accent)
         }) {
             (b.gtk_range_set_value)(nord_scale, idx as f64);
-            let text = format!("Nord Palette: {} ({}) {}", item.name, item.cluster, item.hex);
+            let text = format!("Nord Palette: {} {}", item.name, item.hex);
             if let Ok(c_text) = CString::new(text) {
                 (b.gtk_label_set_text)(lbl_nord, c_text.as_ptr());
             }
