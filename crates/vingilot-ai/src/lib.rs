@@ -7,5 +7,6 @@ pub mod provider;
 pub use dispatcher::{BrowserToolDefinition, BrowserToolDispatcher, ToolRisk};
 pub use mcp::{McpServer, McpTool};
 pub use provider::{
-    AiError, AiProvider, AiResult, ChatCompletionResponse, ChatMessage, OpenAiCompatibleProvider,
+    AiError, AiProvider, AiResult, ChatCompletionResponse, ChatMessage, GeminiProvider,
+    OpenAiCompatibleProvider, GEMINI_AI_STUDIO_BASE_URL, GEMINI_POPULAR_MODELS,
 };

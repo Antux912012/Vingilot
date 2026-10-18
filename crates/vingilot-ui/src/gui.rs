@@ -93,6 +93,53 @@ static VISIBLE_BOOKMARK_TILES: Mutex<Vec<VisibleBookmarkTile>> = Mutex::new(Vec:
 static ACTIVE_CONTEXT_TILE: Mutex<Option<VisibleBookmarkTile>> = Mutex::new(None);
 static ACTIVE_BM_EDIT_NAME_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 static ACTIVE_BM_EDIT_URL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_AI_URL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_AI_MODEL_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_AI_KEY_ENTRY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+static ACTIVE_AI_STATUS_ROW: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct VingilotAiConfig {
+    pub provider: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
+}
+
+impl Default for VingilotAiConfig {
+    fn default() -> Self {
+        Self {
+            provider: "gemini".to_string(),
+            base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+            model: "gemini-2.5-flash".to_string(),
+            api_key: String::new(),
+        }
+    }
+}
+
+fn get_ai_config_file_path() -> Option<std::path::PathBuf> {
+    let path = get_session_file_path()?;
+    Some(path.with_file_name("ai.json"))
+}
+
+pub fn load_ai_config() -> VingilotAiConfig {
+    if let Some(path) = get_ai_config_file_path() {
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            if let Ok(cfg) = serde_json::from_str::<VingilotAiConfig>(&raw) {
+                return cfg;
+            }
+        }
+    }
+    VingilotAiConfig::default()
+}
+
+pub fn save_ai_config(cfg: &VingilotAiConfig) {
+    if let Some(path) = get_ai_config_file_path() {
+        if let Ok(json) = serde_json::to_string_pretty(cfg) {
+            let _ = std::fs::write(path, json);
+        }
+    }
+}
 
 fn get_session_file_path() -> Option<std::path::PathBuf> {
     let config_base = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
@@ -4628,35 +4675,128 @@ unsafe extern "C" fn on_preferences_clicked(_button: *mut c_void, _user_data: *m
 
     (b.adw_preferences_page_add)(page_priv, grp_priv);
 
+    let ai_cfg = load_ai_config();
+
     let grp_ai = (b.adw_preferences_group_new)();
     (b.adw_preferences_group_set_title)(
         grp_ai,
-        CString::new("Local AI Assistant").unwrap().as_ptr(),
+        CString::new("AI Assistant (Gemini AI Studio / OpenAI / Claude / Local LLMs)")
+            .unwrap()
+            .as_ptr(),
     );
 
     let row_ai_provider = (b.adw_action_row_new)();
     (b.adw_preferences_row_set_title)(
         row_ai_provider,
-        CString::new("AI Endpoint").unwrap().as_ptr(),
+        CString::new("Active AI Endpoint & Model").unwrap().as_ptr(),
     );
+    let ai_sub = format!("{} — Model: {}", ai_cfg.base_url, ai_cfg.model);
     (b.adw_action_row_set_subtitle)(
         row_ai_provider,
-        CString::new("Ollama / OpenAI API (http://localhost:11434/v1)")
+        CString::new(ai_sub).unwrap().as_ptr(),
+    );
+    ACTIVE_AI_STATUS_ROW.store(row_ai_provider, Ordering::SeqCst);
+    (b.adw_preferences_group_add)(grp_ai, row_ai_provider);
+
+    // Interactive AI Configuration Box (Presets + URL / Model / API Key + Save)
+    let ai_cfg_box = (b.gtk_box_new)(1, 8);
+    (b.gtk_widget_set_margin_top)(ai_cfg_box, 10);
+    (b.gtk_widget_set_margin_bottom)(ai_cfg_box, 10);
+    (b.gtk_widget_set_margin_start)(ai_cfg_box, 12);
+    (b.gtk_widget_set_margin_end)(ai_cfg_box, 12);
+
+    let presets_row = (b.gtk_box_new)(0, 6);
+    let presets: [(&str, usize, &str); 6] = [
+        ("Google Gemini (AI Studio)", 1, "Configure Google AI Studio Gemini API (gemini-2.5-flash)"),
+        ("OpenAI", 2, "Configure OpenAI API (gpt-4o-mini)"),
+        ("Claude", 3, "Configure Anthropic Claude API (claude-3-5-sonnet-latest)"),
+        ("Ollama", 4, "Configure local Ollama daemon (localhost:11434)"),
+        ("LM Studio", 5, "Configure local LM Studio server (localhost:1234)"),
+        ("llama.cpp", 6, "Configure local llama.cpp server (127.0.0.1:18080)"),
+    ];
+    let preset_cb = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_ai_preset_clicked);
+    for (label_txt, preset_id, tip) in presets {
+        let btn = (b.gtk_button_new_with_label)(CString::new(label_txt).unwrap().as_ptr());
+        (b.gtk_widget_set_tooltip_text)(btn, CString::new(tip).unwrap().as_ptr());
+        (b.g_signal_connect_data)(
+            btn,
+            CString::new("clicked").unwrap().as_ptr(),
+            preset_cb,
+            preset_id as *mut c_void,
+            std::ptr::null_mut(),
+            0,
+        );
+        (b.gtk_box_append)(presets_row, btn);
+    }
+    (b.gtk_box_append)(ai_cfg_box, presets_row);
+
+    let entry_ai_url = (b.gtk_entry_new)();
+    (b.gtk_entry_set_placeholder_text)(
+        entry_ai_url,
+        CString::new("API Base URL (e.g. https://generativelanguage.googleapis.com/v1beta)")
             .unwrap()
             .as_ptr(),
     );
-    (b.adw_preferences_group_add)(grp_ai, row_ai_provider);
+    (b.gtk_editable_set_text)(
+        entry_ai_url,
+        CString::new(ai_cfg.base_url.as_str()).unwrap().as_ptr(),
+    );
+    ACTIVE_AI_URL_ENTRY.store(entry_ai_url, Ordering::SeqCst);
+    (b.gtk_box_append)(ai_cfg_box, entry_ai_url);
 
-    let row_ai_model = (b.adw_action_row_new)();
-    (b.adw_preferences_row_set_title)(
-        row_ai_model,
-        CString::new("Default Model").unwrap().as_ptr(),
+    let entry_ai_model = (b.gtk_entry_new)();
+    (b.gtk_entry_set_placeholder_text)(
+        entry_ai_model,
+        CString::new("Model ID (e.g. gemini-2.5-flash, gpt-4o-mini, claude-3-5-sonnet-latest, llama3.2)")
+            .unwrap()
+            .as_ptr(),
     );
-    (b.adw_action_row_set_subtitle)(
-        row_ai_model,
-        CString::new("llama3.2:latest").unwrap().as_ptr(),
+    (b.gtk_editable_set_text)(
+        entry_ai_model,
+        CString::new(ai_cfg.model.as_str()).unwrap().as_ptr(),
     );
-    (b.adw_preferences_group_add)(grp_ai, row_ai_model);
+    ACTIVE_AI_MODEL_ENTRY.store(entry_ai_model, Ordering::SeqCst);
+    (b.gtk_box_append)(ai_cfg_box, entry_ai_model);
+
+    let entry_ai_key = (b.gtk_entry_new)();
+    (b.gtk_entry_set_placeholder_text)(
+        entry_ai_key,
+        CString::new("API Key (Google AI Studio / OpenAI / Claude — optional for local LLMs)")
+            .unwrap()
+            .as_ptr(),
+    );
+    (b.gtk_editable_set_text)(
+        entry_ai_key,
+        CString::new(ai_cfg.api_key.as_str()).unwrap().as_ptr(),
+    );
+    ACTIVE_AI_KEY_ENTRY.store(entry_ai_key, Ordering::SeqCst);
+    (b.gtk_box_append)(ai_cfg_box, entry_ai_key);
+
+    let btn_save_ai = (b.gtk_button_new_with_label)(
+        CString::new("Save AI Configuration").unwrap().as_ptr(),
+    );
+    (b.gtk_widget_add_css_class)(
+        btn_save_ai,
+        CString::new("suggested-action").unwrap().as_ptr(),
+    );
+    let save_ai_cb = std::mem::transmute::<
+        unsafe extern "C" fn(*mut c_void, *mut c_void),
+        GCallback,
+    >(on_ai_save_clicked);
+    (b.g_signal_connect_data)(
+        btn_save_ai,
+        CString::new("clicked").unwrap().as_ptr(),
+        save_ai_cb,
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        0,
+    );
+    (b.gtk_box_append)(ai_cfg_box, btn_save_ai);
+
+    (b.adw_preferences_group_add)(grp_ai, ai_cfg_box);
     (b.adw_preferences_page_add)(page_priv, grp_ai);
 
     let grp_dist = (b.adw_preferences_group_new)();
@@ -4710,6 +4850,122 @@ unsafe extern "C" fn on_preferences_clicked(_button: *mut c_void, _user_data: *m
     (b.gtk_window_present)(prefs);
 }
 
+unsafe extern "C" fn on_ai_preset_clicked(_button: *mut c_void, user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let preset_id = user_data as usize;
+    let (url, model) = match preset_id {
+        1 => ("https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash"),
+        2 => ("https://api.openai.com/v1", "gpt-4o-mini"),
+        3 => ("https://api.anthropic.com/v1", "claude-3-5-sonnet-latest"),
+        4 => ("http://localhost:11434/v1", "llama3.2"),
+        5 => ("http://localhost:1234/v1", "local-model"),
+        6 => ("http://127.0.0.1:18080/v1", "default"),
+        _ => return,
+    };
+    let entry_url = ACTIVE_AI_URL_ENTRY.load(Ordering::SeqCst);
+    if !entry_url.is_null() {
+        (b.gtk_editable_set_text)(entry_url, CString::new(url).unwrap().as_ptr());
+    }
+    let entry_model = ACTIVE_AI_MODEL_ENTRY.load(Ordering::SeqCst);
+    if !entry_model.is_null() {
+        (b.gtk_editable_set_text)(entry_model, CString::new(model).unwrap().as_ptr());
+    }
+}
+
+unsafe extern "C" fn on_ai_save_clicked(_button: *mut c_void, _user_data: *mut c_void) {
+    let b = match BINDINGS.get() {
+        Some(b) => b,
+        None => return,
+    };
+    let entry_url = ACTIVE_AI_URL_ENTRY.load(Ordering::SeqCst);
+    let entry_model = ACTIVE_AI_MODEL_ENTRY.load(Ordering::SeqCst);
+    let entry_key = ACTIVE_AI_KEY_ENTRY.load(Ordering::SeqCst);
+
+    let base_url = if !entry_url.is_null() {
+        let ptr = (b.gtk_editable_get_text)(entry_url);
+        if !ptr.is_null() {
+            CStr::from_ptr(ptr).to_string_lossy().trim().to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let model = if !entry_model.is_null() {
+        let ptr = (b.gtk_editable_get_text)(entry_model);
+        if !ptr.is_null() {
+            CStr::from_ptr(ptr).to_string_lossy().trim().to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let api_key = if !entry_key.is_null() {
+        let ptr = (b.gtk_editable_get_text)(entry_key);
+        if !ptr.is_null() {
+            CStr::from_ptr(ptr).to_string_lossy().trim().to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let lower = base_url.to_lowercase();
+    let provider = if lower.contains("generativelanguage.googleapis.com") {
+        "gemini"
+    } else if lower.contains("api.anthropic.com") {
+        "claude"
+    } else if lower.contains("api.openai.com") {
+        "openai"
+    } else if lower.contains("11434") {
+        "ollama"
+    } else if lower.contains("1234") {
+        "lmstudio"
+    } else if lower.contains("18080") {
+        "llamacpp"
+    } else {
+        "custom"
+    }
+    .to_string();
+
+    let cfg = VingilotAiConfig {
+        provider,
+        base_url: if base_url.is_empty() {
+            "https://generativelanguage.googleapis.com/v1beta".to_string()
+        } else {
+            base_url
+        },
+        model: if model.is_empty() {
+            "gemini-2.5-flash".to_string()
+        } else {
+            model
+        },
+        api_key,
+    };
+    save_ai_config(&cfg);
+
+    let status_row = ACTIVE_AI_STATUS_ROW.load(Ordering::SeqCst);
+    if !status_row.is_null() {
+        let subtitle = format!(
+            "Saved: {} • Model: {} • Key: {}",
+            cfg.base_url,
+            cfg.model,
+            if cfg.api_key.is_empty() { "None" } else { "Configured" }
+        );
+        (b.adw_action_row_set_subtitle)(
+            status_row,
+            CString::new(subtitle.as_str()).unwrap().as_ptr(),
+        );
+    }
+}
+
 unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_void) {
     let popover = ACTIVE_POPOVER.load(Ordering::SeqCst);
     if !popover.is_null() {
@@ -4732,7 +4988,7 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
             .unwrap()
             .as_ptr(),
     );
-    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.3").unwrap().as_ptr());
+    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.5").unwrap().as_ptr());
     (b.adw_about_dialog_set_developer_name)(
         dialog,
         CString::new("Antonio & The Vingilot Project Team")

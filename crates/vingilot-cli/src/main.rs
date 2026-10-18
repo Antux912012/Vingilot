@@ -59,6 +59,14 @@ pub enum Commands {
         prompt: String,
         #[arg(short, long, help = "Optional target URL for page context")]
         url: Option<String>,
+        #[arg(long, help = "Optional AI provider (gemini, openai, claude, ollama, lmstudio, llamacpp)")]
+        provider: Option<String>,
+        #[arg(short, long, help = "Optional model ID (e.g. gemini-2.5-flash)")]
+        model: Option<String>,
+        #[arg(long, help = "Optional API key (or set GEMINI_API_KEY / GOOGLE_API_KEY / OPENAI_API_KEY)")]
+        api_key: Option<String>,
+        #[arg(long, help = "Optional custom API base URL")]
+        base_url: Option<String>,
     },
     /// Exports local browser data into a portable .vingilot sync bundle
     Export {
@@ -131,9 +139,71 @@ pub fn handle_cli(cli: Cli) -> Result<(), String> {
         Commands::Screenshot { url, output } => {
             println!("Saved screenshot of {url} to {}", output.display());
         }
-        Commands::Ai { prompt, url } => {
+        Commands::Ai {
+            prompt,
+            url,
+            provider,
+            model,
+            api_key,
+            base_url,
+        } => {
+            use vingilot_ai::{
+                AiProvider, ChatMessage, OpenAiCompatibleProvider, GEMINI_AI_STUDIO_BASE_URL,
+            };
             println!("AI query: {prompt} (Context: {:?})", url);
-            println!("AI response: Analyzed successfully.");
+            let resolved_key = api_key
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok())
+                .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
+                .or_else(|| std::env::var("OPENAI_API_KEY").ok())
+                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty());
+
+            let prov_name = provider.as_deref().unwrap_or("gemini").to_lowercase();
+            let resolved_url = base_url.unwrap_or_else(|| {
+                match prov_name.as_str() {
+                    "gemini" | "google" => GEMINI_AI_STUDIO_BASE_URL,
+                    "openai" => "https://api.openai.com/v1",
+                    "claude" | "anthropic" => "https://api.anthropic.com/v1",
+                    "ollama" => "http://localhost:11434/v1",
+                    "lmstudio" => "http://localhost:1234/v1",
+                    "llamacpp" => "http://127.0.0.1:18080/v1",
+                    _ => GEMINI_AI_STUDIO_BASE_URL,
+                }
+                .to_string()
+            });
+            let resolved_model = model.unwrap_or_else(|| match prov_name.as_str() {
+                "gemini" | "google" => "gemini-2.5-flash".to_string(),
+                "openai" => "gpt-4o-mini".to_string(),
+                "claude" | "anthropic" => "claude-3-5-sonnet-latest".to_string(),
+                "ollama" => "llama3.2".to_string(),
+                _ => "gemini-2.5-flash".to_string(),
+            });
+
+            if resolved_key.is_some()
+                || prov_name == "ollama"
+                || prov_name == "lmstudio"
+                || prov_name == "llamacpp"
+            {
+                let ai =
+                    OpenAiCompatibleProvider::new(&resolved_url, &resolved_model, resolved_key);
+                let ctx = url.as_deref().unwrap_or("General context");
+                let messages = vec![
+                    ChatMessage {
+                        role: "system".to_string(),
+                        content: format!(
+                            "You are Vingilot Browser AI Assistant. Context: {ctx}"
+                        ),
+                    },
+                    ChatMessage {
+                        role: "user".to_string(),
+                        content: prompt,
+                    },
+                ];
+                let resp = ai.complete(&messages).map_err(|e| e.to_string())?;
+                println!("AI response: {}", resp.content);
+            } else {
+                println!("AI response: Analyzed successfully.");
+            }
         }
         Commands::Export { output, passphrase } => {
             let manifest = SyncManifest {
@@ -245,6 +315,37 @@ mod tests {
                 assert_eq!(passphrase.as_deref(), Some("my_passphrase"));
             }
             _ => panic!("Expected Export command"),
+        }
+    }
+
+    #[test]
+    fn test_cli_parsing_ai_gemini_command() {
+        let args = vec![
+            "vingilot-cli",
+            "ai",
+            "Summarize this page",
+            "--provider",
+            "gemini",
+            "--model",
+            "gemini-2.5-flash",
+            "--api-key",
+            "AIzaSyTest",
+        ];
+        let cli = Cli::try_parse_from(args).unwrap();
+        match cli.command {
+            Commands::Ai {
+                prompt,
+                provider,
+                model,
+                api_key,
+                ..
+            } => {
+                assert_eq!(prompt, "Summarize this page");
+                assert_eq!(provider.as_deref(), Some("gemini"));
+                assert_eq!(model.as_deref(), Some("gemini-2.5-flash"));
+                assert_eq!(api_key.as_deref(), Some("AIzaSyTest"));
+            }
+            _ => panic!("Expected Ai command"),
         }
     }
 }

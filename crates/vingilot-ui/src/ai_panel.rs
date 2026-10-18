@@ -30,6 +30,23 @@ impl AiAssistantPanel {
         }
     }
 
+    /// Creates an AI Assistant Panel configured for Google Gemini via Google AI Studio.
+    pub fn new_gemini(api_key: Option<String>, model: Option<&str>) -> Self {
+        Self {
+            is_open: false,
+            provider: OpenAiCompatibleProvider::new_gemini(api_key, model),
+            history: Vec::new(),
+        }
+    }
+
+    pub fn provider(&self) -> &OpenAiCompatibleProvider {
+        &self.provider
+    }
+
+    pub fn set_provider(&mut self, base_url: &str, model: &str, api_key: Option<String>) {
+        self.provider = OpenAiCompatibleProvider::new(base_url, model, api_key);
+    }
+
     pub fn is_open(&self) -> bool {
         self.is_open
     }

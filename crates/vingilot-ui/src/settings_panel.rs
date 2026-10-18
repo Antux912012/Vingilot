@@ -86,6 +86,15 @@ impl SettingsPanel {
         self.current_settings.ai_model_name = model;
         self.current_settings.ai_api_key = api_key;
     }
+
+    /// Configures Google Gemini (Google AI Studio) as the active AI provider.
+    pub fn set_gemini_ai_config(&mut self, api_key: Option<String>, model: Option<String>) {
+        self.current_settings.ai_provider_base_url =
+            Some("https://generativelanguage.googleapis.com/v1beta".to_string());
+        self.current_settings.ai_model_name =
+            Some(model.unwrap_or_else(|| "gemini-2.5-flash".to_string()));
+        self.current_settings.ai_api_key = api_key;
+    }
 }
 
 #[cfg(test)]
@@ -111,5 +120,15 @@ mod tests {
             None,
         );
         assert_eq!(panel.settings().ai_model_name.as_deref(), Some("llama3.2"));
+
+        panel.set_gemini_ai_config(Some("AIzaSyTestKey".to_string()), None);
+        assert_eq!(
+            panel.settings().ai_provider_base_url.as_deref(),
+            Some("https://generativelanguage.googleapis.com/v1beta")
+        );
+        assert_eq!(
+            panel.settings().ai_model_name.as_deref(),
+            Some("gemini-2.5-flash")
+        );
     }
 }

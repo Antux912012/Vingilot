@@ -17,6 +17,15 @@
   <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
   <url type="vcs-browser">https://github.com/Antux912012/Vingilot</url>
   <releases>
+    <release version="0.1.5" date="2026-10-18">
+      <description>
+        <p>
+          Version 0.1.5 release featuring native Google Gemini AI API support distributed via Google AI Studio
+          (v1beta generateContent and model discovery), Anthropic Claude API support, interactive AI provider
+          preset selector in Preferences, and CLI AI assistant provider options.
+        </p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-10-16">
       <description>
         <p>
