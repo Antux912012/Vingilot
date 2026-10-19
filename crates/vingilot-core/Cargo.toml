@@ -1,6 +1,6 @@
 [package]
 name = "vingilot-core"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [dependencies]
@@ -14,3 +14,5 @@ zip = { version = "2.2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 aes-gcm = "0.10"
 tempfile = "3.13"
+getrandom = "0.2"
+vingilot-common = { path = "../vingilot-common" }

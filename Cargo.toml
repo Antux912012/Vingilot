@@ -1,9 +1,11 @@
 [workspace]
 members = [
+    "crates/vingilot-common",
     "crates/vingilot-core",
     "crates/vingilot-engine",
     "crates/vingilot-ui",
     "crates/vingilot-ai",
     "crates/vingilot-cli",
+    "crates/vingilot-downloadd",
 ]
 resolver = "2"

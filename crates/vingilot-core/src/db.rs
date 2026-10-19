@@ -36,10 +36,10 @@ impl Database {
 
     /// Initializes tables and indexes.
     pub fn init_schema(&self) -> CoreResult<()> {
+        vingilot_common::configure_sqlite_connection(&self.conn)?;
+
         self.conn.execute_batch(
             r#"
-            PRAGMA foreign_keys = ON;
-
             CREATE TABLE IF NOT EXISTS profiles (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,

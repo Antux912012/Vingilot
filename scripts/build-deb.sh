@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION="0.1.5"
+VERSION=$(grep -m1 '^version' "${ROOT_DIR}/crates/vingilot-ui/Cargo.toml" | sed -E 's/.*"([^"]+)".*/\1/')
 REVISION="1"
 ARCH="amd64"
 PKG_NAME="vingilot"

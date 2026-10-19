@@ -141,9 +141,12 @@ impl AdBlockManager {
         if self.allowlist.contains(&clean) {
             return true;
         }
-        // Subdomain matching: if allowlist contains "example.com", "sub.example.com" is allowlisted
+        // Subdomain matching: if allowlist contains "example.com", "sub.example.com" is allowlisted (zero-allocation)
         for allowed in &self.allowlist {
-            if clean.ends_with(&format!(".{allowed}")) {
+            if clean.len() > allowed.len()
+                && clean.ends_with(allowed.as_str())
+                && clean.as_bytes()[clean.len() - allowed.len() - 1] == b'.'
+            {
                 return true;
             }
         }

@@ -248,7 +248,7 @@ impl AiProvider for GeminiProvider {
             "-H",
             "Content-Type: application/json",
             "-H",
-            "User-Agent: Vingilot/0.1.5",
+            "User-Agent: Vingilot/0.1.6",
             "-H",
             &format!("x-goog-api-key: {}", self.api_key),
             "--data-binary",
@@ -525,7 +525,7 @@ impl AiProvider for OpenAiCompatibleProvider {
             "-H",
             "Content-Type: application/json",
             "-H",
-            "User-Agent: Vingilot/0.1.5",
+            "User-Agent: Vingilot/0.1.6",
         ]);
         if let Some(ref key) = self.api_key {
             cmd.args(["-H", &format!("Authorization: Bearer {key}")]);

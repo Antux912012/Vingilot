@@ -2398,7 +2398,6 @@ unsafe extern "C" fn on_bm_ctx_edit(_button: *mut c_void, _user_data: *mut c_voi
     let entry_url = (b.gtk_entry_new)();
     let cur_url = tile
         .url
-        .clone()
         .unwrap_or_else(|| "https://duckduckgo.com".to_string());
     if let Ok(c_url) = CString::new(cur_url) {
         (b.gtk_editable_set_text)(entry_url, c_url.as_ptr());
@@ -4180,7 +4179,7 @@ unsafe extern "C" fn on_tab_row_clicked(_button: *mut c_void, user_data: *mut c_
                             } else if cur_uri.is_empty() || cur_uri == "about:blank" {
                                 "New Tab".to_string()
                             } else {
-                                cur_uri.clone()
+                                cur_uri
                             };
                         }
                     }
@@ -4988,7 +4987,7 @@ unsafe extern "C" fn on_about_clicked(_button: *mut c_void, _user_data: *mut c_v
             .unwrap()
             .as_ptr(),
     );
-    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.5").unwrap().as_ptr());
+    (b.adw_about_dialog_set_version)(dialog, CString::new("0.1.6").unwrap().as_ptr());
     (b.adw_about_dialog_set_developer_name)(
         dialog,
         CString::new("Antonio & The Vingilot Project Team")
@@ -7268,7 +7267,7 @@ unsafe fn switch_profile(profile_id: &str) {
                             } else if cur_uri.is_empty() || cur_uri == "about:blank" {
                                 "New Tab".to_string()
                             } else {
-                                cur_uri.clone()
+                                cur_uri
                             };
                         }
                     }
@@ -8072,7 +8071,7 @@ unsafe extern "C" fn on_profile_create_save(_button: *mut c_void, user_data: *mu
             None => return,
         };
         let new_prof = storage.add_profile(&name, &icon);
-        let id = new_prof.id.clone();
+        let id = new_prof.id;
         let _ = storage.save();
         id
     };
@@ -8099,7 +8098,7 @@ unsafe extern "C" fn on_profile_delete_button_clicked(
 
     close_profile_context_popover(b);
 
-    let id = active_prof.id.clone();
+    let id = active_prof.id;
 
     // Remove profile from storage
     if let Ok(mut guard) = ACTIVE_PROFILE_STORAGE.lock() {

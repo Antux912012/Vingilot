@@ -29,6 +29,7 @@ impl Tab {
             cache_directory: None,
             enable_javascript: true,
             user_agent: None,
+            sandbox_enabled: true,
         };
 
         let title = if is_incognito {

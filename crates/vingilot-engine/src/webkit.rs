@@ -10,6 +10,7 @@ pub struct WebKitEngineConfig {
     pub cache_directory: Option<PathBuf>,
     pub enable_javascript: bool,
     pub user_agent: Option<String>,
+    pub sandbox_enabled: bool,
 }
 
 impl Default for WebKitEngineConfig {
@@ -19,6 +20,7 @@ impl Default for WebKitEngineConfig {
             cache_directory: None,
             enable_javascript: true,
             user_agent: None,
+            sandbox_enabled: true,
         }
     }
 }
@@ -66,6 +68,11 @@ impl WebKitEngine {
     /// Access the underlying engine configuration.
     pub fn config(&self) -> &WebKitEngineConfig {
         &self.config
+    }
+
+    /// Whether WebKit process sandboxing is enforced.
+    pub fn is_sandbox_enabled(&self) -> bool {
+        self.config.sandbox_enabled
     }
 
     /// Drain any pending navigation events.
@@ -299,5 +306,11 @@ mod tests {
             engine.get_profile_data_dir().unwrap(),
             Path::new("/tmp/vingilot/profiles/work")
         );
+    }
+
+    #[test]
+    fn test_webkit_sandbox_enabled() {
+        let engine = WebKitEngine::default();
+        assert!(engine.is_sandbox_enabled());
     }
 }

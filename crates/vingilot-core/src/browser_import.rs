@@ -154,6 +154,7 @@ impl FirefoxImporter {
         std::fs::copy(places_sqlite_path, &temp_copy)?;
 
         let conn = rusqlite::Connection::open(&temp_copy)?;
+        let _ = vingilot_common::configure_sqlite_connection(&conn);
         let mut stmt = conn.prepare(
             r#"
             SELECT url, title, visit_count, last_visit_date
