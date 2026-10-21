@@ -4,19 +4,41 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Vingilot</name>
-  <summary>Native GTK4/Libadwaita web browser with AI assistance and local sync</summary>
+  <summary>Fast, distraction-free GTK4 and Libadwaita web browser with native Wayland acceleration</summary>
   <description>
     <p>
-      Vingilot is a privacy-first, native Linux web browser designed for desktop and mobile.
-      It features WebKitGTK 6.0 rendering, Círdan local encrypted password manager,
-      Private incognito browsing, and offline portable sync bundles.
+      Vingilot is a privacy-first, native Linux web browser built from the ground up in Rust with GTK4, Libadwaita, and WebKitGTK 6.0. Engineered specifically for modern Wayland desktops and Linux mobile environments, Vingilot delivers fluid touch gestures, adaptive responsive layouts, and zero-compromise hardware-accelerated rendering.
     </p>
+    <p>
+      With built-in tracking protection and local cryptographic isolation, your browsing remains private, fast, and sandboxed without external cloud dependencies.
+    </p>
+    <ul>
+      <li>Hardware-Accelerated Wayland Engine: Native WebKitGTK 6.0 integration with GPU rendering and low battery consumption</li>
+      <li>Círdan Password Manager: Offline encrypted credentials vault protected by Argon2id and AES-256-GCM</li>
+      <li>Built-in Content Shield: Ad and tracker blocker supporting AdGuard and EasyList rule compilations</li>
+      <li>Standalone Download Daemon: Resilient multi-part file downloader with desktop notifications and tray controls</li>
+      <li>True Black &amp; Custom Themes: OLED-black styling, Nord accents, and customizable backdrop blur</li>
+      <li>Dual AI Assistant: Native in-browser side panel supporting Google Gemini and OpenAI-compatible providers</li>
+    </ul>
   </description>
+  <branding>
+    <color type="primary" scheme_preference="light">#3584e4</color>
+    <color type="primary" scheme_preference="dark">#1c71d8</color>
+  </branding>
+  <content_rating type="oars-1.1" />
   <launchable type="desktop-id">io.github.antux912012.Vingilot.desktop</launchable>
   <url type="homepage">https://antux912012.github.io/arda-tech/</url>
   <url type="bugtracker">https://github.com/Antux912012/Vingilot/issues</url>
   <url type="vcs-browser">https://github.com/Antux912012/Vingilot</url>
   <releases>
+    <release version="0.1.6" date="2026-10-19">
+      <description>
+        <p>
+          Version 0.1.6 release featuring shared crate consolidation, standalone download daemon integration,
+          security hardening, and packaging parity.
+        </p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-10-18">
       <description>
         <p>
